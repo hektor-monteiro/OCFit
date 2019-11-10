@@ -502,8 +502,11 @@ def fit_isochroneUBVRI(obs_file, verbosefile, probcut, guess=False,magcut=20.0, 
     cond6 = obs['V'] < magcut
     cond7 = obs['P'] > probcut
     
+    # to remove Nan
+#    ind  = np.where(cond1&cond2&cond3&cond4&cond5&cond6&cond7)
     
-    ind  = np.where(cond1&cond2&cond3&cond4&cond5&cond6&cond7)
+    # keep Nan
+    ind  = np.where(cond6&cond7)
     
     obs = obs[ind]
 
@@ -551,7 +554,7 @@ def fit_isochroneUBVRI(obs_file, verbosefile, probcut, guess=False,magcut=20.0, 
 
     for n in range(nruns):
 
-        seed= None #np.random.randint(2**20,2**21) # for each run set distinct seed for IMF sampling
+        seed= np.random.randint(2**20,2**21) # for each run set distinct seed for IMF sampling
         
         if bootstrap:
             ind_boot = np.random.choice(np.arange(obs_oc.size), 
@@ -1088,7 +1091,7 @@ def lnlikelihoodCE(theta,obs_iso,obs_iso_er,bands,refMag,prange,weight,prior=[[1
     
     # get synth isochrone
 
-    mod_cluster = model_cluster(age,dist,FeH,Av,bin_frac,800,bands,
+    mod_cluster = model_cluster(age,dist,FeH,Av,bin_frac,1000,bands,
                                 refMag,error=False,Mcut=Mlim,seed=seed,
                                 imf='chabrier',alpha=2.1, beta=-3.)
 
@@ -1104,7 +1107,7 @@ def lnlikelihoodCE(theta,obs_iso,obs_iso_er,bands,refMag,prange,weight,prior=[[1
 #        aux = np.prod(1./np.sqrt(2.*np.pi)*
 #                      np.exp(-0.5*(obs[i,:]-mod)**2),axis=1)
         
-        aux = np.prod(1./np.sqrt(2.*np.pi*obs_er[i,:]**2)*
+        aux = np.nanprod(1./np.sqrt(2.*np.pi*obs_er[i,:]**2)*
                       np.exp(-0.5*(obs[i,:]-mod)**2/obs_er[i,:]**2),axis=1)
         
 #        aux = np.prod(np.exp(-0.5*np.abs(obs[i,:]-mod)),axis=1)

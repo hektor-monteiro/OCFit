@@ -52,12 +52,12 @@ except:
 
 data_dir = dir+'data/'
 # file containing the observational data
-file = 'synth-cluster-UBVRI.txt'
+file = 'IC4651_18.232778_SistemaPadrao_IC_4651_data_stars.dat_Equal.out'
 
 obs_file = data_dir+file
 
 #name of the cluster being fit
-name =  'synteticUBVRI'
+name =  'IC4651'
 
 
 
@@ -93,16 +93,16 @@ guess = False
 
 obs = np.genfromtxt(obs_file,names=True)
 
-#remove nans
-cond1 = np.isfinite(obs['U'])
-cond2 = np.isfinite(obs['B'])
-cond3 = np.isfinite(obs['V'])
-cond4 = np.isfinite(obs['R'])
-cond5 = np.isfinite(obs['I'])
-
-ind  = np.where(cond1&cond2&cond3&cond4&cond5)
-
-obs = obs[ind]
+##remove nans
+#cond1 = np.isfinite(obs['U'])
+#cond2 = np.isfinite(obs['B'])
+#cond3 = np.isfinite(obs['V'])
+#cond4 = np.isfinite(obs['R'])
+#cond5 = np.isfinite(obs['I'])
+#
+#ind  = np.where(cond1&cond2&cond3&cond4&cond5)
+#
+#obs = obs[ind]
 
 
 ind_m = obs['P'] > probcut
@@ -157,7 +157,7 @@ plt.savefig(dirout+name+'/'+name+'_membership51-BVxV.png', dpi=300)
 fig, ax = plt.subplots()
 plt.scatter(Bmag-Vmag,Umag-Bmag,s=1,color='gray',alpha=0.4)
 plt.scatter(Bmag[ind_m]-Vmag[ind_m],Umag[ind_m]-Bmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim((Umag-Bmag).max()-0.5,(Umag-Bmag).min()-0.5)
+plt.ylim(np.nanmax(Umag-Bmag)-0.5,np.nanmin(Umag-Bmag)-0.5)
 plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
 plt.xlabel('B-V')
 plt.ylabel('U-B')
@@ -170,7 +170,7 @@ plt.savefig(dirout+name+'/'+name+'_membership51-BVxUB.png', dpi=300)
 fig, ax = plt.subplots()
 plt.scatter(Bmag-Vmag,Vmag,s=1,color='gray',alpha=0.4)
 plt.scatter(Bmag[nstars70]-Vmag[nstars70],Vmag[nstars70], cmap='jet',s=4.e2*sVmag[nstars70],c=members[nstars70])
-plt.ylim(Vmag.max()+0.5,Vmag.min()-1.)
+plt.ylim(np.nanmax(Vmag)+0.5,np.nanmin(Vmag)-1.)
 plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
 plt.xlabel('B-V')
 plt.ylabel('V')
@@ -181,7 +181,7 @@ plt.savefig(dirout+name+'/'+name+'_membership70-BVxV.png', dpi=300)
 fig, ax = plt.subplots()
 plt.scatter(Bmag-Vmag,Umag-Bmag,s=1,color='gray',alpha=0.4)
 plt.scatter(Bmag[nstars70]-Vmag[nstars70],Umag[nstars70]-Bmag[nstars70], cmap='jet',s=4.e2*sVmag[nstars70],c=members[nstars70])
-plt.ylim((Umag-Bmag).max()-0.5,(Umag-Bmag).min()-0.5)
+plt.ylim(np.nanmax(Umag-Bmag)-0.5,np.nanmin(Umag-Bmag)-0.5)
 plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
 plt.xlabel('B-V')
 plt.ylabel('U-B')
@@ -207,7 +207,7 @@ plt.savefig(dirout+name+'/'+name+'_membership80-BVxV.png', dpi=300)
 fig, ax = plt.subplots()
 plt.scatter(Bmag-Vmag,Umag-Bmag,s=1,color='gray',alpha=0.4)
 plt.scatter(Bmag[nstars80]-Vmag[nstars80],Umag[nstars80]-Bmag[nstars80], cmap='jet',s=4.e2*sVmag[nstars80],c=members[nstars80])
-plt.ylim((Umag-Bmag).max()-0.5,(Umag-Bmag).min()-0.5)
+plt.ylim(np.nanmax(Umag-Bmag)-0.5,np.nanmin(Umag-Bmag)-0.5)
 plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
 plt.xlabel('B-V')
 plt.ylabel('U-B')
@@ -233,7 +233,7 @@ plt.savefig(dirout+name+'/'+name+'_membership90-BVxV.png', dpi=300)
 fig, ax = plt.subplots()
 plt.scatter(Bmag-Vmag,Umag-Bmag,s=1,color='gray',alpha=0.4)
 plt.scatter(Bmag[nstars90]-Vmag[nstars90],Umag[nstars90]-Bmag[nstars90], cmap='jet',s=4.e2*sVmag[nstars90],c=members[nstars90])
-plt.ylim((Umag-Bmag).max()-0.5,(Umag-Bmag).min()-0.5)
+plt.ylim(np.nanmax(Umag-Bmag)-0.5,np.nanmin(Umag-Bmag)-0.5)
 plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
 plt.xlabel('B-V')
 plt.ylabel('U-B')
@@ -269,8 +269,11 @@ except:
     else:
         dist_guess_sig = np.min([0.5*guess_dist,1.])
             
-guessparameters = [8.0,guess_dist,0.0,1.]
+guessparameters = [8.8,guess_dist,0.0,1.]
 guess_sig = np.array([1.e3, dist_guess_sig, 1.e3, 1.e3])  # prior values = [age,dist,Fe/H,Av]     
+#guess_sig = np.array([1.e-2, dist_guess_sig, 1.e3, 1.e3])  # prior values = [age,dist,Fe/H,Av]     
+
+
 prior = np.stack([guessparameters,guess_sig])             # sigma of the prior values
 
 print ('prior:')
@@ -324,7 +327,7 @@ fit_iso = make_obs_iso(filters, grid_iso, res_isoc[1], res_isoc[3])
 fig, ax = plt.subplots()
 plt.scatter(Bmag-Vmag,Vmag,s=1,color='gray',alpha=0.4)
 plt.scatter(Bmag[ind_m]-Vmag[ind_m],Vmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim(Vmag.max()+0.5,Vmag.min()-1.)
+plt.ylim(np.nanmax(Vmag)+0.5,np.nanmin(Vmag)-1.)
 plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
 plt.plot(fit_iso['Bmag']-fit_iso['Vmag'],fit_iso['Vmag'],'g',   label='best solution',alpha=0.9)
 plt.xlabel('B-V')
@@ -338,7 +341,7 @@ plt.savefig(dirout+name+'/'+name+'_BVxV.png', dpi=300)
 fig, ax = plt.subplots()
 plt.scatter(Bmag-Vmag,Umag-Bmag,s=1,color='gray',alpha=0.4)
 plt.scatter(Bmag[ind_m]-Vmag[ind_m],Umag[ind_m]-Bmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim((Umag-Bmag).max()-0.5,(Umag-Bmag).min()-0.5)
+plt.ylim(np.nanmax(Umag-Bmag)-0.5,np.nanmin(Umag-Bmag)-0.5)
 plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
 plt.plot(fit_iso['Bmag']-fit_iso['Vmag'],fit_iso['Umag']-fit_iso['Bmag'],'g', alpha=0.9)
 plt.xlabel('B-V')
@@ -350,7 +353,7 @@ plt.savefig(dirout+name+'/'+name+'_BVxUB.png', dpi=300)
 fig, ax = plt.subplots()
 plt.scatter(Vmag-Rmag,Vmag,s=1,color='gray',alpha=0.4)
 plt.scatter(Vmag[ind_m]-Rmag[ind_m],Vmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim(Vmag.max()+0.3,Vmag.min()-1.)
+plt.ylim(np.nanmax(Vmag)+0.3,np.nanmin(Vmag)-1.)
 plt.xlim(np.nanmin(Vmag-Rmag)-0.3,np.nanmax(Vmag-Rmag)+0.3)
 plt.plot(fit_iso['Vmag']-fit_iso['Rmag'],fit_iso['Vmag'],'g', alpha=0.9)
 plt.xlabel('V-R')
@@ -362,7 +365,7 @@ plt.savefig(dirout+name+'/'+name+'_VRxV.png', dpi=300)
 fig, ax = plt.subplots()
 plt.scatter(Vmag-Imag,Vmag,s=1,color='gray',alpha=0.4)
 plt.scatter(Vmag[ind_m]-Imag[ind_m],Vmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim(Vmag.max()+0.3,Vmag.min()-1.)
+plt.ylim(np.nanmax(Vmag)+0.3,np.nanmin(Vmag)-1.)
 plt.xlim(np.nanmin(Vmag-Imag)-0.3,np.nanmax(Vmag-Imag)+0.3)
 plt.plot(fit_iso['Vmag']-fit_iso['Imag'],fit_iso['Vmag'],'g', alpha=0.9)
 plt.xlabel('V-I')
@@ -374,7 +377,7 @@ plt.savefig(dirout+name+'/'+name+'_VIxV.png', dpi=300)
 fig, ax = plt.subplots()
 plt.scatter(Umag-Bmag,Vmag,s=1,color='gray',alpha=0.4)
 plt.scatter(Umag[ind_m]-Bmag[ind_m],Vmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim(Vmag.max()+0.3,Vmag.min()-1.)
+plt.ylim(np.nanmax(Vmag)+0.3,np.nanmin(Vmag)-1.)
 plt.xlim(np.nanmin(Umag-Bmag)-0.3,np.nanmax(Umag-Bmag)+0.3)
 plt.plot(fit_iso['Umag']-fit_iso['Bmag'],fit_iso['Vmag'],'g',  label='best solution',alpha=0.9)
 plt.xlabel('U-B')
