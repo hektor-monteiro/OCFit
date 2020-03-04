@@ -1,0 +1,189 @@
+################################################################################
+##    This proprietary file was created by the S-PLUS collaboration.
+##    - website: http://www.splus.iag.usp.br
+################################################################################
+##    This catalogue provides an Aperture-matched
+##    PSF-corrected Multi-band Photometry.
+##
+##=============================================================================
+##    General comments:
+##    --------------------------
+##    - This is a NOT magnitude-limited catalogue.
+##    - Only sources detected in at least 3 bands within r_auto are kept.
+##    - Non-detected sources are set to magnitude m = 99.00. Corresponding
+##      uncertainties replaced by a 2-sigma upper-limit and
+##      signal-to-noise = -1.00 (e.g., m=99.00, em=23.50, s2n=-1.00).
+##    - Non-observed sources are set to magnitude m = -99.00. Corresponding
+##      uncertainties set to 0.00 and signal-to-noise = -1.00
+##      (e.g., m=-99.00, em=0.00, s2n=-1.00).
+##    - Sources are detected on a weighted-combination of griz bands.
+##    - Absolute calibration tighten to Gaia G-band using SPLUS aper-apertures.
+##    - Image reduction performed using Jype pipeline (Cenarro+18: arxiv.org/pdf/1804.02667.pdf).
+##
+##=============================================================================
+##   Filter System (12): http://www.splus.iag.usp.br/camera-and-filters/
+##    - Broad-bands  (5): u, g, r, i, z
+##    - Narrow-bands (7): F378, F395, F410, F430, F515, F660, F861
+##
+##=============================================================================
+##    Photometry performed within 7.7 types of apertures:
+##    - AUTO:  total-restricted apertures (Molino+17).
+##             Best for SED-fitting (e.g., photo-z) since they keep a high S/N across filters.
+##    - PETRO: total apertures integrating most light. Lower S/N than AUTO.
+##             Best for the estimation of physical properties of sources.
+##    - APER:  circular fixed apertures of 7.7" diameter.
+##             Best for calibration and comparison with other datasets.
+##
+##=============================================================================
+##    Photometric redshifts:
+##    -------------------------------
+##      NO PHOTOMETRIC REDSHIFTS IN THE PHOTOMETRIC CATALOGUES
+##
+##=============================================================================
+##   The star/galaxy classification:
+##    -------------------------------
+##      NO STAR/GALAXY CLASSIFICATION IN THE PHOTOMETRIC CATALOGUES
+##
+################################################################################
+##   iDR2: Dec, 2019
+##   Any further information, please contact with:
+##      * General             :   Claudia Mendes de Oliveira     <claudia.oliveira@iag.usp.br>
+##      * Image Reduction     :   Fábio R. Herpich               <fabiorafaelh@gmail.com>
+##      *                         Ariel Werle                    <arielwrl@usp.br>    
+##      * Photometry          :   Laura Maria Sampedro Hernandez <lauramariash@gmail.com>
+##      *                         Felipe de Almeida Fernandes    <felipefer42@gmail.com>
+##
+################################################################################
+##
+#   1 FIELD                 Stripe82 Field
+#   2 ID                    Object ID Number on the corresponding Stripe82 field
+#   3 RA                    Right Ascension in decimal degrees 
+#   4 Dec                   Declination in decimal degrees
+#   5 X                     X-pixel coordinate 
+#   6 Y                     Y-pixel coordinate  
+#   7 Aperture              Total-restricted Photometric Aperture (pixels) 
+#   8 s2nDet                Signal-to-Noise on Detection Image (FLUX_AUTO/FLUXERR_AUTO) 
+#   9 PhotoFlag             SExtractor Photometric Flag 
+#  10 FWHM                  Full width at half maximum for detection image (pixels) 
+#  11 FWHM_n                Normalized Full width at half maximum to detection image seeing (pixels)
+#  12 MUMAX                 Peak Surface Brightness above background [mag x arcsec^{-2}]
+#  13 A                     Profile RMS along major axis (pixels)
+#  14 B                     Profile RMS along minor axis (pixels)
+#  15 THETA                 Position Angle (CCW/x)
+#  16 FlRadDet              Fraction-of-light radii (pixels)
+#  17 KrRadDet              Kron apertures in units of A or B (pixels)
+#  18 nDet_auto             Number of filters detected within auto aperture
+#  19 nDet_petro            Number of filters detected within petro aperture
+#  20 nDet_aper             Number of filters detected within aper aperture
+#  21 uJAVA_auto            Total-restricted magnitude [AB]
+#  22 euJAVA_auto           Total-restricted magnitude uncertainty [AB]
+#  23 s2n_uJAVA_auto        Signal-to-noise of the detection within uJAVA_auto
+#  24 uJAVA_petro           Total magnitude [AB]
+#  25 euJAVA_petro          Total magnitude uncertainty [AB]
+#  26 s2n_uJAVA_petro       Signal-to-noise of the detection within uJAVA_petro
+#  27 uJAVA_aper            Circular-7.7arcsec-Diameter-Aperture magnitude [AB]
+#  28 euJAVA_aper           Circular-7.7arcsec-Diameter-Aperture magnitude uncertainty [AB]
+#  29 s2n_uJAVA_aper        Signal-to-noise of the detection within uJAVA_aper
+#  30 F378_auto             Total-restricted magnitude [AB]
+#  31 eF378_auto            Total-restricted magnitude uncertainty [AB]
+#  32 s2n_F378_auto         Signal-to-noise of the detection within F378_auto
+#  33 F378_petro            Total magnitude [AB]
+#  34 eF378_petro           Total magnitude uncertainty [AB]
+#  35 s2n_F378_petro        Signal-to-noise of the detection within F0378_petro
+#  36 F378_aper             Circular-7.7arcsec-Diameter-Aperture magnitude [AB]
+#  37 eF378_aper            Circular-7.7arcsec-Diameter-Aperture magnitude uncertainty [AB]
+#  38 s2n_F378_aper         Signal-to-noise of the detection within F378_aper
+#  39 F395_auto             Total-restricted magnitude [AB]
+#  40 eF395_auto            Total-restricted magnitude uncertainty [AB]
+#  41 s2n_F395_auto         Signal-to-noise of the detection within F395_auto
+#  42 F395_petro            Total magnitude [AB]
+#  43 eF395_petro           Total magnitude uncertainty [AB]
+#  44 s2n_F395_petro        Signal-to-noise of the detection within F395_petro
+#  45 F395_aper             Circular-7.7arcsec-Diameter-Aperture magnitude [AB]
+#  46 eF395_aper            Circular-7.7arcsec-Diameter-Aperture magnitude uncertainty [AB]
+#  47 s2n_F395_aper         Signal-to-noise of the detection within F395_aper
+#  48 F410_auto             Total-restricted magnitude [AB]
+#  49 eF410_auto            Total-restricted magnitude uncertainty [AB]
+#  50 s2n_F410_auto         Signal-to-noise of the detection within F410_auto
+#  51 F410_petro            Total magnitude [AB]
+#  52 eF410_petro           Total magnitude uncertainty [AB]
+#  53 s2n_F410_petro        Signal-to-noise of the detection within F410_petro
+#  54 F410_aper             Circular-7.7arcsec-Diameter-Aperture magnitude [AB]
+#  55 eF410_aper            Circular-7.7arcsec-Diameter-Aperture magnitude uncertainty [AB]
+#  56 s2n_F410_aper         Signal-to-noise of the detection within F410_aper
+#  57 F430_auto             Total-restricted magnitude [AB]
+#  58 eF430_auto            Total-restricted magnitude uncertainty [AB]
+#  59 s2n_F430_auto         Signal-to-noise of the detection within F430_auto
+#  60 F430_petro            Total magnitude [AB]
+#  61 eF430_petro           Total magnitude uncertainty [AB]
+#  62 s2n_F430_petro        Signal-to-noise of the detection within F430_petro
+#  63 F430_aper             Circular-7.7arcsec-Diameter-Aperture magnitude [AB]
+#  64 eF430_aper            Circular-7.7arcsec-Diameter-Aperture magnitude uncertainty [AB]
+#  65 s2n_F430_aper         Signal-to-noise of the detection within F430_aper
+#  66 g_auto                Total-restricted magnitude [AB]
+#  67 eg_auto               Total-restricted magnitude uncertainty [AB]
+#  68 s2n_g_auto            Signal-to-noise of the detection within g_auto
+#  69 g_petro               Total magnitude [AB]
+#  70 eg_petro              Total magnitude uncertainty [AB]
+#  71 s2n_g_petro           Signal-to-noise of the detection within g_petro
+#  72 g_aper                Circular-7.7arcsec-Diameter-Aperture magnitude [AB]
+#  73 eg_aper               Circular-7.7arcsec-Diameter-Aperture magnitude uncertainty [AB]
+#  74 s2n_g_aper            Signal-to-noise of the detection within g_aper
+#  75 F515_auto             Total-restricted magnitude [AB]
+#  76 eF515_auto            Total-restricted magnitude uncertainty [AB]
+#  77 s2n_F515_auto         Signal-to-noise of the detection within F515_auto
+#  78 F515_petro            Total magnitude [AB]
+#  79 eF515_petro           Total magnitude uncertainty [AB]
+#  80 s2n_F515_petro        Signal-to-noise of the detection within F515_petro
+#  81 F515_aper             Circular-7.7arcsec-Diameter-Aperture magnitude [AB]
+#  82 eF515_aper            Circular-7.7arcsec-Diameter-Aperture magnitude uncertainty [AB]
+#  83 s2n_F515_aper         Signal-to-noise of the detection within F515_aper
+#  84 r_auto                Total-restricted magnitude [AB]
+#  85 er_auto               Total-restricted magnitude uncertainty [AB]
+#  86 s2n_r_auto            Signal-to-noise of the detection within r_auto
+#  87 r_petro               Total magnitude [AB]
+#  88 er_petro              Total magnitude uncertainty [AB]
+#  89 s2n_r_petro           Signal-to-noise of the detection within r_petro
+#  90 r_aper                Circular-7.7arcsec-Diameter-Aperture magnitude [AB]
+#  91 er_aper               Circular-7.7arcsec-Diameter-Aperture magnitude uncertainty [AB]
+#  92 s2n_r_aper            Signal-to-noise of the detection within r_aper
+#  93 F660_auto             Total-restricted magnitude [AB]
+#  94 eF660_auto            Total-restricted magnitude uncertainty [AB]
+#  95 s2n_F660_auto         Signal-to-noise of the detection within F660_auto
+#  96 F660_petro            Total magnitude [AB]
+#  97 eF660_petro           Total magnitude uncertainty [AB]
+#  98 s2n_F660_petro        Signal-to-noise of the detection within F660_petro
+#  99 F660_aper             Circular-7.7arcsec-Diameter-Aperture magnitude [AB]
+# 100 eF660_aper            Circular-7.7arcsec-Diameter-Aperture magnitude uncertainty [AB]
+# 101 s2n_F660_aper         Signal-to-noise of the detection within F660_aper
+# 102 i_auto                Total-restricted magnitude [AB]
+# 103 ei_auto               Total-restricted magnitude uncertainty [AB]
+# 104 s2n_i_auto            Signal-to-noise of the detection within i_auto
+# 105 i_petro               Total magnitude [AB]
+# 106 ei_petro              Total magnitude uncertainty [AB]
+# 107 s2n_i_petro           Signal-to-noise of the detection within i_petro
+# 108 i_aper                Circular-7.7arcsec-Diameter-Aperture magnitude [AB]
+# 109 ei_aper               Circular-7.7arcsec-Diameter-Aperture magnitude uncertainty [AB]
+# 110 s2n_i_aper            Signal-to-noise of the detection within i_aper
+# 111 F861_auto             Total-restricted magnitude [AB]
+# 112 eF861_auto            Total-restricted magnitude uncertainty [AB]
+# 113 s2n_F861_auto         Signal-to-noise of the detection within F861_auto
+# 114 F861_petro            Total magnitude [AB]
+# 115 eF861_petro           Total magnitude uncertainty [AB]
+# 116 s2n_F861_petro        Signal-to-noise of the detection within F861_petro
+# 117 F861_aper             Circular-7.7arcsec-Diameter-Aperture magnitude [AB]
+# 118 eF861_aper            Circular-7.7arcsec-Diameter-Aperture magnitude uncertainty [AB]
+# 119 s2n_F861_aper         Signal-to-noise of the detection within F861_aper
+# 120 z_auto                Total-restricted magnitude [AB]
+# 121 ez_auto               Total-restricted magnitude uncertainty [AB]
+# 122 s2n_z_auto            Signal-to-noise of the detection within z_auto
+# 123 z_petro               Total magnitude [AB]
+# 124 ez_petro              Total magnitude uncertainty [AB]
+# 125 s2n_z_petro           Signal-to-noise of the detection within z_petro
+# 126 z_aper                Circular-7.7arcsec-Diameter-Aperture magnitude [AB]
+# 127 ez_aper               Circular-7.7arcsec-Diameter-Aperture magnitude uncertainty [AB]
+# 128 s2n_z_aper            Signal-to-noise of the detection within z_aper
+# 129 GroupID               Duplicities ID
+# 130 Flag_Duplicities      Duplicities Flag (0: recommended objects,  1: duplicities with a smaller S2N)
+#
+# FIELD  ID  RA  Dec  X   Y  ISOarea  s2nDet  PhotoFlag  FWHM  FWHM_n  MUMAX  A  B  THETA  FlRadDet  KrRadDet  nDet_auto  nDet_petro  nDet_aper  uJAVA_auto  euJAVA_auto  s2n_uJAVA_auto  uJAVA_petro  euJAVA_petro  s2n_uJAVA_petro  uJAVA_aper  euJAVA_aper  s2n_uJAVA_aper  F378_auto  eF378_auto  s2n_F378_auto  F378_petro  eF378_petro  s2n_F378_petro  F378_aper  eF378_aper  s2n_F378_aper  F395_auto  eF395_auto  s2n_F395_auto  F395_petro  eF395_petro  s2n_F395_petro  F395_aper  eF395_aper  s2n_F395_aper  F410_auto  eF410_auto  s2n_F410_auto  F410_petro  eF410_petro  s2n_F410_petro  F410_aper  eF410_aper  s2n_F410_aper  F430_auto  eF430_auto  s2n_F430_auto  F430_petro  eF430_petro  s2n_F430_petro  F430_aper  eF430_aper  s2n_F430_aper  g_auto  eg_auto  s2n_g_auto  g_petro eg_petro  s2n_g_petro  g_aper  eg_aper  s2n_g_aper  F515_auto  eF515_auto  s2n_F515_auto  F515_petro  eF515_petro  s2n_F515_petro  F515_aper  eF515_aper  s2n_F515_aper  r_auto  er_auto  s2n_r_auto  r_petro er_petro  s2n_r_petro  r_aper  er_aper  s2n_r_aper  F660_auto  eF660_auto  s2n_F660_auto  F660_petro  eF660_petro  s2n_F660_petro  F660_aper  eF660_aper  s2n_F660_aper  i_auto  ei_auto  s2n_i_auto  i_petro  ei_petro  s2n_i_petro  i_aper  ei_aper  s2n_i_aper  F861_auto  eF861_auto  s2n_F861_auto  F861_petro  eF861_petro  s2n_F861_petro  F861_aper  eF861_aper  s2n_F861_aper z_auto  ez_auto  s2n_z_auto  z_petro  ez_petro  s2n_z_petro  z_aper  ez_aper  s2n_z_aper  GroupID  Flag_Duplicities

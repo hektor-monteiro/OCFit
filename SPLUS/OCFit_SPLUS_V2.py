@@ -33,16 +33,17 @@ probcut = stars with membership probality than this value are not used in the fi
 """
 import numpy as np
 from matplotlib import pyplot as plt
-from UBVRI_tools_V2 import *
+from SPLUS_tools_V2 import *
 import os
 import time
+import sys
 
 plt.close('all')
 
 ########################################################################################
 
 # directory where the codes are 
-dir = os.getenv("HOME")+'/OCFit/UBVRI/'
+dir = os.getenv("HOME")+'/OCFit/SPLUS/'
 dirout = dir+'Results/'
 # create directory for results
 try:
@@ -51,21 +52,25 @@ except:
     os.mkdir(dirout)       
 
 data_dir = dir+'data/'
+
 # file containing the observational data
-file = 'IC4651_18.232778_SistemaPadrao_IC_4651_data_stars.dat_Equal.out'
+file = 'Blanco1Splus+cantat-2.csv'
 
 obs_file = data_dir+file
 
 #name of the cluster being fit
-name =  'IC4651'
+name =  'Blanco_1'
 
 
 
 # magcut = stars with mags greater than this value will not be used
 magcut = 20.
-probcut = 0.9
+probcut = 0.5
 
+filters = ['gSDSSmag','rSDSSmag','iSDSSmag','zSDSSmag']
+refmag = 'gSDSSmag'
 
+guess = None
 ########################################################################################
 
 
@@ -89,160 +94,62 @@ logfile.write(' \n')
 
 #verbosefile.write('Starting isochrone fitting...\n')
 
-guess = False
 
-obs = np.genfromtxt(obs_file,names=True)
+obs = np.genfromtxt(obs_file,names=True,dtype=None,delimiter=',')
 
-##remove nans
-#cond1 = np.isfinite(obs['U'])
-#cond2 = np.isfinite(obs['B'])
-#cond3 = np.isfinite(obs['V'])
-#cond4 = np.isfinite(obs['R'])
-#cond5 = np.isfinite(obs['I'])
-#
-#ind  = np.where(cond1&cond2&cond3&cond4&cond5)
-#
-#obs = obs[ind]
+# Setup obs data to be fit   
+obs_oc = np.copy(obs[['g_aper','r_aper','i_aper','z_aper']])
+obs_oc.dtype.names=['gSDSSmag','rSDSSmag','iSDSSmag','zSDSSmag']
+obs_oc_er = np.copy(obs[['eg_aper','er_aper','ei_aper','ez_aper']])
+obs_oc_er.dtype.names=['gSDSSmag','rSDSSmag','iSDSSmag','zSDSSmag']
 
 
-ind_m = obs['P'] > probcut
+## repalce -99 values for n.nan
+for filt in filters:
+    obs_oc[filt][np.abs(obs_oc[filt] - (-99.)) < 1.0e-10] = np.nan
+    obs_oc[filt][np.abs(obs_oc[filt] - (99.)) < 1.0e-10] = np.nan
+    obs_oc_er[filt][np.abs(obs_oc_er[filt] - 0.) < 1.0e-10] = np.nan
+    
+
 Plx = obs['Plx']
 erPlx = obs['e_Plx']
-
-###################################################################
-#plot CMD of members
-refmag = 'Vmag'
-
-Umag = obs['U']
-Bmag = obs['B']
-Vmag = obs['V']
-Rmag = obs['R']
-Imag = obs['I']
-sUmag = obs['SU']
-sBmag = obs['SB']
-sVmag = obs['SV']
-sRmag = obs['SR']
-sImag = obs['SI']
-members = obs['P']
+members = obs['Pmemb']
+weight = obs['Pmemb']
 ind_m = members > probcut
-###################################################################
-#print the nuumber of members
-
-nstars51 = np.where(members > 0.51)
-nstars70 = np.where(members > 0.70)
-nstars80 = np.where(members > 0.80)
-nstars90 = np.where(members > 0.90)
-
-print ('stars with P>51% = ',  len(Vmag[nstars51]))
-print ('stars with P>70% = ',  len(Vmag[nstars70]))
-print ('stars with P>80% = ',  len(Vmag[nstars80]))
-print ('stars with P>90% = ',  len(Vmag[nstars90]))
 
 
-###################################################################
-#plots with P>51%
-
-# B-V versus V    
+# Plot cmd
+    
 fig, ax = plt.subplots()
-plt.scatter(Bmag-Vmag,Vmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Bmag[ind_m]-Vmag[ind_m],Vmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim(Vmag.max()+0.5,Vmag.min()-1.)
-plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
-plt.xlabel('B-V')
-plt.ylabel('V')
-#    plt.title(name)    
-plt.savefig(dirout+name+'/'+name+'_membership51-BVxV.png', dpi=300)
+color = obs_oc['gSDSSmag']-obs_oc['zSDSSmag']
+Ymag = obs_oc['gSDSSmag']
 
-# color - color
+plt.scatter(color,Ymag,s=10*members,c=members,cmap='jet')
+plt.ylim(np.nanmax(Ymag)+0.5,np.nanmin(Ymag)-0.5)
+plt.xlim(np.nanmin(color)-0.3,np.nanmax(color)+0.3)
+plt.xlabel('g-z')
+plt.ylabel('g')
+plt.title(name)    
+plt.savefig(dirout+name+'/'+name+'_cmd.png', dpi=300)
+    
+# Plot color-color
+    
 fig, ax = plt.subplots()
-plt.scatter(Bmag-Vmag,Umag-Bmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Bmag[ind_m]-Vmag[ind_m],Umag[ind_m]-Bmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim(np.nanmax(Umag-Bmag)-0.5,np.nanmin(Umag-Bmag)-0.5)
-plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
-plt.xlabel('B-V')
-plt.ylabel('U-B')
-plt.savefig(dirout+name+'/'+name+'_membership51-BVxUB.png', dpi=300)
-##################################################################################
+color1 = obs_oc['gSDSSmag']-obs_oc['rSDSSmag']
+color2 = obs_oc['rSDSSmag']-obs_oc['iSDSSmag']
 
-#plots with P>70%
+plt.scatter(color1,color2,s=10*members,c=members,cmap='jet')
+plt.ylim(np.nanmin(color2)-0.3,np.nanmax(color2)+0.3)
+plt.xlim(np.nanmin(color1)-0.3,np.nanmax(color1)+0.3)
+plt.xlabel('g-r')
+plt.ylabel('i-z')
+plt.title(name)    
+plt.savefig(dirout+name+'/'+name+'_ccd.png', dpi=300)
+    
 
-# B-V versus V    
-fig, ax = plt.subplots()
-plt.scatter(Bmag-Vmag,Vmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Bmag[nstars70]-Vmag[nstars70],Vmag[nstars70], cmap='jet',s=4.e2*sVmag[nstars70],c=members[nstars70])
-plt.ylim(np.nanmax(Vmag)+0.5,np.nanmin(Vmag)-1.)
-plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
-plt.xlabel('B-V')
-plt.ylabel('V')
-#    plt.title(name)    
-plt.savefig(dirout+name+'/'+name+'_membership70-BVxV.png', dpi=300)
-
-# color - color
-fig, ax = plt.subplots()
-plt.scatter(Bmag-Vmag,Umag-Bmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Bmag[nstars70]-Vmag[nstars70],Umag[nstars70]-Bmag[nstars70], cmap='jet',s=4.e2*sVmag[nstars70],c=members[nstars70])
-plt.ylim(np.nanmax(Umag-Bmag)-0.5,np.nanmin(Umag-Bmag)-0.5)
-plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
-plt.xlabel('B-V')
-plt.ylabel('U-B')
-plt.savefig(dirout+name+'/'+name+'_membership70-BVxUB.png', dpi=300)
-
-
-##################################################################################
-
-#plots with P>80%
-
-# B-V versus V    
-fig, ax = plt.subplots()
-plt.scatter(Bmag-Vmag,Vmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Bmag[nstars80]-Vmag[nstars80],Vmag[nstars80], cmap='jet',s=4.e2*sVmag[nstars80],c=members[nstars80])
-plt.ylim(Vmag.max()+0.5,Vmag.min()-1.)
-plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
-plt.xlabel('B-V')
-plt.ylabel('V')
-#    plt.title(name)    
-plt.savefig(dirout+name+'/'+name+'_membership80-BVxV.png', dpi=300)
-
-# color - color
-fig, ax = plt.subplots()
-plt.scatter(Bmag-Vmag,Umag-Bmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Bmag[nstars80]-Vmag[nstars80],Umag[nstars80]-Bmag[nstars80], cmap='jet',s=4.e2*sVmag[nstars80],c=members[nstars80])
-plt.ylim(np.nanmax(Umag-Bmag)-0.5,np.nanmin(Umag-Bmag)-0.5)
-plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
-plt.xlabel('B-V')
-plt.ylabel('U-B')
-plt.savefig(dirout+name+'/'+name+'_membership80-BVxUB.png', dpi=300)
-
-
-##################################################################################
-
-#plots with P>90%
-
-# B-V versus V    
-fig, ax = plt.subplots()
-plt.scatter(Bmag-Vmag,Vmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Bmag[nstars90]-Vmag[nstars90],Vmag[nstars90], cmap='jet',s=4.e2*sVmag[nstars90],c=members[nstars90])
-plt.ylim(Vmag.max()+0.5,Vmag.min()-1.)
-plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
-plt.xlabel('B-V')
-plt.ylabel('V')
-#    plt.title(name)    
-plt.savefig(dirout+name+'/'+name+'_membership90-BVxV.png', dpi=300)
-
-# color - color
-fig, ax = plt.subplots()
-plt.scatter(Bmag-Vmag,Umag-Bmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Bmag[nstars90]-Vmag[nstars90],Umag[nstars90]-Bmag[nstars90], cmap='jet',s=4.e2*sVmag[nstars90],c=members[nstars90])
-plt.ylim(np.nanmax(Umag-Bmag)-0.5,np.nanmin(Umag-Bmag)-0.5)
-plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
-plt.xlabel('B-V')
-plt.ylabel('U-B')
-plt.savefig(dirout+name+'/'+name+'_membership90-BVxUB.png', dpi=300)
-
-##################################################################################
-###################################################################
+##############################################################################
 #distance prior from parallaxe data
-####################################################################################
+##############################################################################
 guess_dist = infer_dist(Plx[ind_m]+0.029, erPlx[ind_m],guess=1./Plx[ind_m].mean())
 print('Infered distance from parallax: %8.3f \n'%(guess_dist))
 #    verbosefile.write('Infered distance from parallax: %8.3f \n'%(guess_dist))
@@ -271,7 +178,6 @@ except:
             
 guessparameters = [8.8,guess_dist,0.0,1.]
 guess_sig = np.array([1.e3, dist_guess_sig, 1.e3, 1.e3])  # prior values = [age,dist,Fe/H,Av]     
-#guess_sig = np.array([1.e-2, dist_guess_sig, 1.e3, 1.e3])  # prior values = [age,dist,Fe/H,Av]     
 
 
 prior = np.stack([guessparameters,guess_sig])             # sigma of the prior values
@@ -293,96 +199,54 @@ print(magcut)
 verbosefile.write('Mag. Cut: \n')
 verbosefile.write(str(magcut)+'\n')
 
-print ('number of member stars:', Vmag[ind_m].size)
-verbosefile.write('number of member stars: %i \n'%Vmag[ind_m].size)
-    
+print ('number of member stars:', Plx[ind_m].size)
+verbosefile.write('number of member stars: %i \n'%Plx[ind_m].size)
+
+
 #################################################################
 
 
-res_isoc, res_isoc_er = fit_isochroneUBVRI(obs_file, verbosefile, probcut, guess=False,magcut=20.0, obs_plx=False, 
-              obs_plx_er=0.05,prior=np.array([[1.],[1.e6]]),bootstrap=False)
-
+res_isoc, res_isoc_er = fit_isochrone(obs_oc,obs_oc_er, weight, filters, refmag, verbosefile, 
+                                           probcut, guess=False,magcut=20.0, 
+                                           obs_plx=False, obs_plx_er=0.05,
+                                           prior=np.array([[1.],[1.e6]]),
+                                           bootstrap=False)
 
 ###############################################################################
-filters = ['Umag','Bmag','Vmag','Rmag','Imag']
-refmag = 'Vmag'
 
-Umag = obs['U']
-Bmag = obs['B']
-Vmag = obs['V']
-Rmag = obs['R']
-Imag = obs['I']
-sUmag = obs['SU']
-sBmag = obs['SB']
-sVmag = obs['SV']
-sRmag = obs['SR']
-sImag = obs['SI']
-members = obs['P']
-ind_m = members > probcut
-
+# get isochrone of best fit
 grid_iso = get_iso_from_grid(res_isoc[0],(10.**res_isoc[2])*0.0152,filters,refmag, Abscut=False)
 fit_iso = make_obs_iso(filters, grid_iso, res_isoc[1], res_isoc[3])                
 
-# B-V versus V    
+# Plot cmd
+    
 fig, ax = plt.subplots()
-plt.scatter(Bmag-Vmag,Vmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Bmag[ind_m]-Vmag[ind_m],Vmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim(np.nanmax(Vmag)+0.5,np.nanmin(Vmag)-1.)
-plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
-plt.plot(fit_iso['Bmag']-fit_iso['Vmag'],fit_iso['Vmag'],'g',   label='best solution',alpha=0.9)
-plt.xlabel('B-V')
-plt.ylabel('V')
-#    plt.title(name)    
-plt.savefig(dirout+name+'/'+name+'_BVxV.png', dpi=300)
+color = obs_oc['gSDSSmag']-obs_oc['zSDSSmag']
+Ymag = obs_oc['gSDSSmag']
 
-
-
-# cor - cor
+plt.scatter(color,Ymag,s=10*members,c=members,cmap='jet')
+plt.ylim(np.nanmax(Ymag)+0.5,np.nanmin(Ymag)-0.5)
+plt.xlim(np.nanmin(color)-0.3,np.nanmax(color)+0.3)
+plt.plot(fit_iso['gSDSSmag']-fit_iso['zSDSSmag'],fit_iso['gSDSSmag'])
+plt.xlabel('g-z')
+plt.ylabel('g')
+plt.title(name)    
+plt.savefig(dirout+name+'/'+name+'_cmd.png', dpi=300)
+    
+# Plot color-color
+    
 fig, ax = plt.subplots()
-plt.scatter(Bmag-Vmag,Umag-Bmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Bmag[ind_m]-Vmag[ind_m],Umag[ind_m]-Bmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim(np.nanmax(Umag-Bmag)-0.5,np.nanmin(Umag-Bmag)-0.5)
-plt.xlim(np.nanmin(Bmag-Vmag)-0.3,np.nanmax(Bmag-Vmag)+0.3)
-plt.plot(fit_iso['Bmag']-fit_iso['Vmag'],fit_iso['Umag']-fit_iso['Bmag'],'g', alpha=0.9)
-plt.xlabel('B-V')
-plt.ylabel('U-B')
-plt.savefig(dirout+name+'/'+name+'_BVxUB.png', dpi=300)
+color1 = obs_oc['gSDSSmag']-obs_oc['rSDSSmag']
+color2 = obs_oc['rSDSSmag']-obs_oc['iSDSSmag']
 
-
-# V-R versus V    
-fig, ax = plt.subplots()
-plt.scatter(Vmag-Rmag,Vmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Vmag[ind_m]-Rmag[ind_m],Vmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim(np.nanmax(Vmag)+0.3,np.nanmin(Vmag)-1.)
-plt.xlim(np.nanmin(Vmag-Rmag)-0.3,np.nanmax(Vmag-Rmag)+0.3)
-plt.plot(fit_iso['Vmag']-fit_iso['Rmag'],fit_iso['Vmag'],'g', alpha=0.9)
-plt.xlabel('V-R')
-plt.ylabel('V')
-plt.savefig(dirout+name+'/'+name+'_VRxV.png', dpi=300)
-
-
-# V-I versus V    
-fig, ax = plt.subplots()
-plt.scatter(Vmag-Imag,Vmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Vmag[ind_m]-Imag[ind_m],Vmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim(np.nanmax(Vmag)+0.3,np.nanmin(Vmag)-1.)
-plt.xlim(np.nanmin(Vmag-Imag)-0.3,np.nanmax(Vmag-Imag)+0.3)
-plt.plot(fit_iso['Vmag']-fit_iso['Imag'],fit_iso['Vmag'],'g', alpha=0.9)
-plt.xlabel('V-I')
-plt.ylabel('V')
-plt.savefig(dirout+name+'/'+name+'_VIxV.png', dpi=300)
-
-
-# U-B versus V    
-fig, ax = plt.subplots()
-plt.scatter(Umag-Bmag,Vmag,s=1,color='gray',alpha=0.4)
-plt.scatter(Umag[ind_m]-Bmag[ind_m],Vmag[ind_m], cmap='jet',s=4.e2*sVmag[ind_m],c=members[ind_m])
-plt.ylim(np.nanmax(Vmag)+0.3,np.nanmin(Vmag)-1.)
-plt.xlim(np.nanmin(Umag-Bmag)-0.3,np.nanmax(Umag-Bmag)+0.3)
-plt.plot(fit_iso['Umag']-fit_iso['Bmag'],fit_iso['Vmag'],'g',  label='best solution',alpha=0.9)
-plt.xlabel('U-B')
-plt.ylabel('V')
-plt.savefig(dirout+name+'/'+name+'_UBxV.png', dpi=300)
+plt.scatter(color1,color2,s=10*members,c=members,cmap='jet')
+plt.plot(fit_iso['gSDSSmag']-fit_iso['rSDSSmag'],fit_iso['rSDSSmag']-fit_iso['iSDSSmag'])
+plt.ylim(np.nanmin(color2)-0.3,np.nanmax(color2)+0.3)
+plt.xlim(np.nanmin(color1)-0.3,np.nanmax(color1)+0.3)
+plt.xlabel('g-r')
+plt.ylabel('i-z')
+plt.title(name)    
+plt.savefig(dirout+name+'/'+name+'_ccd.png', dpi=300)
 
 verbosefile.close()
 logfile.close()

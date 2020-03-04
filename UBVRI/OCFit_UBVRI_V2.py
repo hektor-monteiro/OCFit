@@ -63,7 +63,7 @@ name =  'IC4651'
 
 # magcut = stars with mags greater than this value will not be used
 magcut = 20.
-probcut = 0.51
+probcut = 0.9
 
 
 ########################################################################################

@@ -488,45 +488,19 @@ def run_CE(objective,data,weight,sample,prange,itmax,bandwidth,alpha,tol,nthread
 ##########################################################################################
 # Fit isochrones
         
-def fit_isochroneUBVRI(obs_file, verbosefile, probcut, guess=False,magcut=20.0, obs_plx=False, 
-                  obs_plx_er=0.05,prior=np.array([[1.],[1.e6]]),bootstrap=True):
+def fit_isochrone(obs_oc,obs_oc_er, weight, filters, refmag, verbosefile, 
+                       probcut, guess=False,magcut=20.0, obs_plx=False,
+                       obs_plx_er=0.05,prior=np.array([[1.],[1.e6]]),
+                       bootstrap=True):
     
     print ('Starting isochrone fitting...')
     
-    obs = np.genfromtxt(obs_file,names=True)
 
-       
-    #remove nans
-    cond1 = np.isfinite(obs['U'])
-    cond2 = np.isfinite(obs['B'])
-    cond3 = np.isfinite(obs['V'])
-    cond4 = np.isfinite(obs['R'])
-    cond5 = np.isfinite(obs['I'])
-    cond6 = obs['V'] < magcut
-    cond7 = obs['P'] > probcut
-    
-    # to remove Nan
-#    ind  = np.where(cond1&cond2&cond3&cond4&cond5&cond6&cond7)
-    
-    # keep Nan
-    ind  = np.where(cond6&cond7)
-    
-    obs = obs[ind]
-
-    obs_oc = np.copy(obs[['U','B','V','R','I']])
-    obs_oc.dtype.names=['Umag','Bmag','Vmag','Rmag','Imag']
-    obs_oc_er = np.copy(obs[['SU','SB','SV','SR','SI']])
-    obs_oc_er.dtype.names=['Umag','Bmag','Vmag','Rmag','Imag']
-    weight = obs['P']
     
     # load full isochrone grid data and arrays of unique Age and Z values
     grid_dir = os.getenv("HOME")+'/OCFit/grids/'
-    mod_grid, age_grid, z_grid = load_mod_grid(grid_dir, isoc_set='UBVRI')
-    filters = ['Umag','Bmag','Vmag','Rmag','Imag']
-    refmag = 'Vmag'
-    
-    labels=['age', 'dist', 'met', 'Av']
-    
+    mod_grid, age_grid, z_grid = load_mod_grid(grid_dir, isoc_set='SPLUS')
+        
     prange = np.array([[6.65,10.3],
                        [0.05,20.],
                        [-0.9,0.7],
@@ -537,7 +511,7 @@ def fit_isochroneUBVRI(obs_file, verbosefile, probcut, guess=False,magcut=20.0, 
     # define CE tweak parameters
     nruns = 3
     itmax = 100    
-    sample = 300
+    sample = 100
 
     band = 0.1
     alpha = 0.1
@@ -1114,7 +1088,7 @@ def lnlikelihoodCE(theta,obs_iso,obs_iso_er,bands,refMag,prange,weight,prior=[[1
         
 #        aux = np.prod(np.exp(-0.5*np.abs(obs[i,:]-mod)),axis=1)
 
-        p_iso.append(np.max(aux))
+        p_iso.append(np.nanmax(aux))
 
     p_iso = np.array(p_iso)*np.prod(np.exp(-0.5*( (theta-prior[0,:])/prior[1,:] )**2))
         
@@ -1122,7 +1096,7 @@ def lnlikelihoodCE(theta,obs_iso,obs_iso_er,bands,refMag,prange,weight,prior=[[1
     res = np.log(p_iso) + np.log(weight)
     res = -np.mean(res)
     
-    #print res, p_iso.max(), p_iso.min() #'   '.join('%0.3f' % v for v in theta)
+    #print(res, p_iso.max(), p_iso.min()) 
     
     return res
 
