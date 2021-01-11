@@ -506,12 +506,21 @@ def fit_isochrone(obs_oc,obs_oc_er, weight, filters, refmag, verbosefile,
                        [-0.9,0.7],
                        [0.01,5.0]])
 
+    if (obs_plx != False):
+        #prange[0,:] = [np.max([6.65, guess[0]-1.5]), np.min([10.3, guess[0]+1.5])]
+        if(obs_plx > 3*obs_plx_er):
+            prange[1,:] = [np.max([0.,1./(obs_plx+3*obs_plx_er)]), np.min([25.,1./np.abs(obs_plx-3*obs_plx_er)])]
+        else:
+            prange[1,:] = [np.max([0.,1./(obs_plx+3*obs_plx_er)]), np.min([25.,1./np.abs(obs_plx-0.8*obs_plx)])]
+            
+    print('distance prange:',prange[1,:])
+
     ndim = prange.shape[0]
 
     # define CE tweak parameters
     nruns = 3
     itmax = 100    
-    sample = 100
+    sample = 300
 
     band = 0.1
     alpha = 0.1

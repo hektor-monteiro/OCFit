@@ -5,30 +5,24 @@ Created on Wed Aug 28 12:40:23 2019
 last update 20 oct 2019
 @author: Hektor & Wilton
 
-to change the number of runs go to function UBVRI_tools line 708
-To determine reliable errors set bootstrap = True at line 79
- the input file must have at least the following columns:
- U       SU     B      SB     V       SV     R       SR     I      SI  P
-
-(use the file synth-cluster-UBVRI.txt as example)
-
-The parameter of the synthetic file are:
-age = 8.3
-FeH = 0.2 
-dist = 2.500
-Av = 1.5
-bin_frac = 0.5
-
-The code uses the parallaxes of the members as prior to estimate the distance.
-To chage the priors go to line  168. Note that very large sigma values imply that prior is flat.
-
-The code print the CMD and color-color plots with memberships in the output directory before making isochrone fits.
 
 
 magcut = stars with Vmag greater than this value are not used in the fit
 probcut = stars with membership probality than this value are not used in the fit
 
-
+To convert Vega to ABmags, add
+        uJAVA 1.116
+        F378 0.489
+        F395 -0.019
+        F410 -0.168
+        F430 -0.135
+        gSDSS -0.102
+        F515 -0.061
+        rSDSS 0.150
+        F660 0.312
+        iSDSS 0.389
+        F861 0.530
+        zSDSS 0.562
 
 """
 import numpy as np
@@ -64,11 +58,21 @@ name =  'Blanco_1'
 
 
 # magcut = stars with mags greater than this value will not be used
-magcut = 20.
+magcut = 50.
 probcut = 0.5
 
-filters = ['gSDSSmag','rSDSSmag','iSDSSmag','zSDSSmag']
-refmag = 'gSDSSmag'
+# filters = ['gSDSSmag','rSDSSmag','iSDSSmag','zSDSSmag']
+# refmag = 'gSDSSmag'
+
+# filters = ['rSDSSmag','iSDSSmag','zSDSSmag']
+# refmag = 'rSDSSmag'
+
+# filters = ['gSDSSmag','rSDSSmag','iSDSSmag','zSDSSmag','F515mag', 'F660mag', 'F861mag']
+# refmag = 'gSDSSmag'
+
+filters = ['F515mag', 'F660mag', 'F861mag']
+refmag = 'F515mag'
+
 
 guess = None
 ########################################################################################
@@ -97,17 +101,31 @@ logfile.write(' \n')
 
 obs = np.genfromtxt(obs_file,names=True,dtype=None,delimiter=',')
 
+# Convert from Vegamags to AB mags
+
+obs['g_auto'] = obs['g_auto'] + 0.102
+obs['r_auto'] = obs['r_auto'] - 0.150
+obs['i_auto'] = obs['i_auto'] - 0.389
+obs['z_auto'] = obs['z_auto'] - 0.562
+obs['F515_auto'] = obs['F515_auto'] + 0.061
+obs['F660_auto'] = obs['F660_auto'] - 0.312
+obs['F861_auto'] = obs['F861_auto'] - 0.530
+
 # Setup obs data to be fit   
-obs_oc = np.copy(obs[['g_aper','r_aper','i_aper','z_aper']])
-obs_oc.dtype.names=['gSDSSmag','rSDSSmag','iSDSSmag','zSDSSmag']
-obs_oc_er = np.copy(obs[['eg_aper','er_aper','ei_aper','ez_aper']])
-obs_oc_er.dtype.names=['gSDSSmag','rSDSSmag','iSDSSmag','zSDSSmag']
+#obs_oc = np.copy(obs[['g_aper','r_aper','i_aper','z_aper']])
+#obs_oc_er = np.copy(obs[['eg_aper','er_aper','ei_aper','ez_aper']])
+
+obs_oc = np.copy(obs[['g_auto','r_auto','i_auto','z_auto','F515_auto','F660_auto','F861_auto']])
+obs_oc_er = np.copy(obs[['eg_auto','er_auto','ei_auto','ez_auto','eF515_auto','eF660_auto','eF861_auto']])
+
+obs_oc.dtype.names=['gSDSSmag','rSDSSmag','iSDSSmag','zSDSSmag','F515mag','F660mag','F861mag']
+obs_oc_er.dtype.names=['gSDSSmag','rSDSSmag','iSDSSmag','zSDSSmag','F515mag','F660mag','F861mag']
 
 
 ## repalce -99 values for n.nan
 for filt in filters:
-    obs_oc[filt][np.abs(obs_oc[filt] - (-99.)) < 1.0e-10] = np.nan
-    obs_oc[filt][np.abs(obs_oc[filt] - (99.)) < 1.0e-10] = np.nan
+    obs_oc[filt][np.abs(obs_oc[filt] - (-99.)) < 1.] = np.nan
+    obs_oc[filt][np.abs(obs_oc[filt] - (99.)) < 1.] = np.nan
     obs_oc_er[filt][np.abs(obs_oc_er[filt] - 0.) < 1.0e-10] = np.nan
     
 
@@ -208,7 +226,7 @@ verbosefile.write('number of member stars: %i \n'%Plx[ind_m].size)
 
 res_isoc, res_isoc_er = fit_isochrone(obs_oc,obs_oc_er, weight, filters, refmag, verbosefile, 
                                            probcut, guess=False,magcut=20.0, 
-                                           obs_plx=False, obs_plx_er=0.05,
+                                           obs_plx=False, obs_plx_er=Plx.std(),
                                            prior=np.array([[1.],[1.e6]]),
                                            bootstrap=False)
 
@@ -231,10 +249,63 @@ plt.plot(fit_iso['gSDSSmag']-fit_iso['zSDSSmag'],fit_iso['gSDSSmag'])
 plt.xlabel('g-z')
 plt.ylabel('g')
 plt.title(name)    
-plt.savefig(dirout+name+'/'+name+'_cmd.png', dpi=300)
+plt.savefig(dirout+name+'/'+name+'_cmd_gxgz.png', dpi=300)
     
+fig, ax = plt.subplots()
+color = obs_oc['gSDSSmag']-obs_oc['rSDSSmag']
+Ymag = obs_oc['gSDSSmag']
+
+plt.scatter(color,Ymag,s=10*members,c=members,cmap='jet')
+plt.ylim(np.nanmax(Ymag)+0.5,np.nanmin(Ymag)-0.5)
+plt.xlim(np.nanmin(color)-0.3,np.nanmax(color)+0.3)
+plt.plot(fit_iso['gSDSSmag']-fit_iso['rSDSSmag'],fit_iso['gSDSSmag'])
+plt.xlabel('g-r')
+plt.ylabel('g')
+plt.title(name)    
+plt.savefig(dirout+name+'/'+name+'_cmd_gxgr.png', dpi=300)
+    
+fig, ax = plt.subplots()
+color = obs_oc['gSDSSmag']-obs_oc['iSDSSmag']
+Ymag = obs_oc['gSDSSmag']
+
+plt.scatter(color,Ymag,s=10*members,c=members,cmap='jet')
+plt.ylim(np.nanmax(Ymag)+0.5,np.nanmin(Ymag)-0.5)
+plt.xlim(np.nanmin(color)-0.3,np.nanmax(color)+0.3)
+plt.plot(fit_iso['gSDSSmag']-fit_iso['iSDSSmag'],fit_iso['gSDSSmag'])
+plt.xlabel('g-i')
+plt.ylabel('g')
+plt.title(name)    
+plt.savefig(dirout+name+'/'+name+'_cmd_gxgi.png', dpi=300)
+    
+fig, ax = plt.subplots()
+color = obs_oc['F660mag']-obs_oc['F861mag']
+Ymag = obs_oc['F515mag']
+
+plt.scatter(color,Ymag,s=10*members,c=members,cmap='jet')
+plt.ylim(np.nanmax(Ymag)+0.5,np.nanmin(Ymag)-0.5)
+plt.xlim(np.nanmin(color)-0.3,np.nanmax(color)+0.3)
+plt.plot(fit_iso['F660mag']-fit_iso['F861mag'],fit_iso['F515mag'])
+plt.xlabel('F660mag-F861mag')
+plt.ylabel('F515mag')
+plt.title(name)    
+plt.savefig(dirout+name+'/'+name+'_cmd_narrow.png', dpi=300)
+
+
 # Plot color-color
     
+fig, ax = plt.subplots()
+color1 = obs_oc['gSDSSmag']-obs_oc['rSDSSmag']
+color2 = obs_oc['iSDSSmag']-obs_oc['zSDSSmag']
+
+plt.scatter(color1,color2,s=10*members,c=members,cmap='jet')
+plt.plot(fit_iso['gSDSSmag']-fit_iso['rSDSSmag'],fit_iso['iSDSSmag']-fit_iso['zSDSSmag'])
+plt.ylim(np.nanmin(color2)-0.3,np.nanmax(color2)+0.3)
+plt.xlim(np.nanmin(color1)-0.3,np.nanmax(color1)+0.3)
+plt.xlabel('g-r')
+plt.ylabel('i-z')
+plt.title(name)    
+plt.savefig(dirout+name+'/'+name+'_ccd_grxiz.png', dpi=300)
+
 fig, ax = plt.subplots()
 color1 = obs_oc['gSDSSmag']-obs_oc['rSDSSmag']
 color2 = obs_oc['rSDSSmag']-obs_oc['iSDSSmag']
@@ -244,9 +315,9 @@ plt.plot(fit_iso['gSDSSmag']-fit_iso['rSDSSmag'],fit_iso['rSDSSmag']-fit_iso['iS
 plt.ylim(np.nanmin(color2)-0.3,np.nanmax(color2)+0.3)
 plt.xlim(np.nanmin(color1)-0.3,np.nanmax(color1)+0.3)
 plt.xlabel('g-r')
-plt.ylabel('i-z')
+plt.ylabel('r-i')
 plt.title(name)    
-plt.savefig(dirout+name+'/'+name+'_ccd.png', dpi=300)
+plt.savefig(dirout+name+'/'+name+'_ccd_grxri.png', dpi=300)
 
 verbosefile.close()
 logfile.close()

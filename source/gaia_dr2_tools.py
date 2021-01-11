@@ -3,24 +3,34 @@
 """
 Created on Fri May  4 16:34:43 2018
 
-@author: Wilton Dias and Hektor Monteiro 
+@author: hmonteiro
 """
 
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
+import sys
+import timeit
 import multiprocessing as mp
+from scipy.spatial.distance import cdist
 from scipy import stats
+import time
+from astroquery.vizier import Vizier
 import astropy.units as u
+import os
+import warnings
+from astropy.modeling import models, fitting
 from astropy.coordinates import SkyCoord
 from astropy import wcs
+from astropy.coordinates import Angle
+from oc_tools_padova import *
+from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker,TextArea, DrawingArea
+import corner
+import emcee
 from astropy.stats import mad_std
+from scipy.optimize import least_squares,minimize
 from math import ceil
 from scipy import linalg
-from matplotlib.offsetbox import AnchoredOffsetbox, AuxTransformBox, VPacker,TextArea, DrawingArea
-from scipy.optimize import least_squares,minimize
-import os
-from scipy.interpolate import interp1d,LinearNDInterpolator,griddata
-from scipy.integrate import trapz,cumtrapz
-
 
 ##########################################################################################
 def lowess_ag(x, y, f=2. / 3., iter=3):
@@ -60,6 +70,31 @@ def lowess_ag(x, y, f=2. / 3., iter=3):
 # hill function to perform smooth transitions
 def hill(x,p,h):
     return  x**p/(x**p + h**p)
+
+##########################################################################################
+def gather_results(outfile,results_dir,overwrite=True):
+    
+    dirs = os.listdir(results_dir)
+    dirs = [s for s in dirs if os.path.isdir(results_dir+s)]
+    
+    if overwrite:
+        logfile = open(results_dir+outfile, "w")
+    else:
+        logfile = open(results_dir+outfile, "a")
+    logfile.write(time.strftime("%c")+'\n')
+    logfile.write(' \n')
+    logfile.write('             name;       rah;   ram;   ras;        deg;    dem;    decs;    RA_ICRS;     DE_ICRS;    radius;   crad;     dist;     e_dist;    age;     e_age;     FeH;    e_FeH;     Av;      e_Av;      AG;      e_AG;       Nc;      Plx;     sigPlx;   e_Plx;    pmRA;     sigpmRA;  e_pmRA;   pmDE;     sigpmDE;  e_pmDE;   Vr;      e_Vr;\n ')
+    for folder in dirs:
+        f = open(results_dir+folder+'/results_'+folder+'.txt', "r")
+        aux=f.readlines()
+        try:
+            logfile.write(aux[3])
+        except:
+            continue
+    
+    logfile.close()
+    
+    print('Done consolidating log file...')
         
 ##########################################################################################
 def likelihood_dist(dist,plx, eplx):
@@ -92,28 +127,6 @@ def gaussian(x, mu, sig):
 ##########################################################################################
 def smoothclamp(x, mi, mx): 
     return mi + (mx-mi)*(lambda t: np.where(t < 0 , 0, np.where( t <= 1 , 3*t**2-2*t**3, 1 ) ) )( (x-mi)/(mx-mi) )
-
-
-###############################################
-# Load binary file with full isochrone grid
-# and returns array of data and arrays of unique age and Z values
-#
-def load_mod_grid(dir, isoc_set='UBVRI'):
-    global mod_grid
-    global age_grid
-    global z_grid
-
-    if(isoc_set == 'UBVRI'):
-        mod_grid = np.load(dir+'full_isoc_UBVRI_CMD33.npy')
-        
-    if(isoc_set == 'MIST-UBVRI'):
-        mod_grid = np.load(dir+'full_isoc_MIST-UBVRI.npy')
-                    
-    age_grid = np.unique(mod_grid['Age'])
-    z_grid = np.unique(mod_grid['Zini'])
-    
-    return mod_grid, age_grid, z_grid
-
 ##########################################################################################
 # calculate spatial density given RA and DEC of stars
     
@@ -352,19 +365,22 @@ def likelihood_Plx(theta,data, weight):
 def fit_plx(obs,weight):  
     
     # filter data
-    sig_clip = 3.
+    sig_clip = 6.
     cond1 = np.abs(obs-np.nanmean(obs)) < sig_clip*np.nanstd(obs)    
     obs = obs[cond1]
     weight = weight[cond1]
 
     print ('Starting parallax fitting...')
     
-#     Define the parameter space
+    # Define the parameter space
     prange = np.array([[0.1,0.9],
                        [0,obs.max()],
                        [0.001,0.05],
                        [obs.min(),obs.max()],
                        [0.1,obs.std()]])
+    
+    midpoint = (prange[:,1]-prange[:,0])/2.+prange[:,0]    
+    ndim = prange.shape[0]
     
     # define CE tweak parameters
     nruns = 5
@@ -373,7 +389,7 @@ def fit_plx(obs,weight):
     
     band = 0.15
     alpha = 0.1
-    tol = 1.e-3
+    tol = 1.e-40
 
     guess=False 
     
@@ -484,64 +500,76 @@ def run_CE(objective,data,weight,sample,prange,itmax,bandwidth,alpha,tol,nthread
 
 ##########################################################################################
 # Fit isochrones
-        
-def fit_isochroneUBVRI(obs_file, verbosefile, probcut, guess=False,magcut=20.0, obs_plx=False, 
-                  obs_plx_er=0.05,prior=np.array([[1.],[1.e6]]),bootstrap=True):
+    
+def fit_isochrone(obs_file, verbosefile,guess=False,magcut=17.0, obs_plx=False, 
+                  obs_plx_er=0.05,prior=np.array([[1.],[1.e6]]), bootstrap=False):
     
     print ('Starting isochrone fitting...')
+    verbosefile.write('Starting isochrone fitting...\n')
     
     obs = np.genfromtxt(obs_file,names=True)
-
-       
+        
     #remove nans
-    cond1 = np.isfinite(obs['U'])
-    cond2 = np.isfinite(obs['B'])
-    cond3 = np.isfinite(obs['V'])
-    cond4 = np.isfinite(obs['R'])
-    cond5 = np.isfinite(obs['I'])
-    cond6 = obs['V'] < magcut
-    cond7 = obs['P'] > probcut
+    cond1 = np.isfinite(obs['Gmag'])
+    cond2 = np.isfinite(obs['BPmag'])
+    cond3 = np.isfinite(obs['RPmag'])
+    cond4 = obs['BPmag'] < magcut
     
-    # to remove Nan
-#    ind  = np.where(cond1&cond2&cond3&cond4&cond5&cond6&cond7)
     
-    # keep Nan
-    ind  = np.where(cond6&cond7)
+    ind  = np.where(cond1&cond2&cond3&cond4)
     
     obs = obs[ind]
 
-    obs_oc = np.copy(obs[['U','B','V','R','I']])
-    obs_oc.dtype.names=['Umag','Bmag','Vmag','Rmag','Imag']
-    obs_oc_er = np.copy(obs[['SU','SB','SV','SR','SI']])
-    obs_oc_er.dtype.names=['Umag','Bmag','Vmag','Rmag','Imag']
-    weight = obs['P']
+    obs_oc = np.copy(obs[['Gmag','BPmag','RPmag']])
+    obs_oc.dtype.names=['Gmag','G_BPmag','G_RPmag']
+    obs_oc_er = np.copy(obs[['e_Gmag','e_BPmag','e_RPmag']])
+    obs_oc_er.dtype.names=['Gmag','G_BPmag','G_RPmag']
+    weight = obs['P'] * (obs_oc['Gmag'].min()/obs_oc['Gmag'])**1
     
+
     # load full isochrone grid data and arrays of unique Age and Z values
-    grid_dir = os.getenv("HOME")+'/OCFit/grids/'
-    mod_grid, age_grid, z_grid = load_mod_grid(grid_dir, isoc_set='UBVRI')
-    filters = ['Umag','Bmag','Vmag','Rmag','Imag']
-    refmag = 'Vmag'
+    grid_dir = './grids/'
+    mod_grid, age_grid, z_grid = load_mod_grid(grid_dir, isoc_set='GAIA')
+    #filters = ['Gmag','G_BPmag','G_RPmag']
+    filters = ['G_BPmag','G_RPmag']
+    refmag = 'G_BPmag'
     
     labels=['age', 'dist', 'met', 'Av']
     
     prange = np.array([[6.65,10.3],
                        [0.05,20.],
                        [-0.9,0.7],
-                       [0.01,5.0]])
+                       [0.01,6.0]])
+            
+    if (guess != False):
+        prange[0,:] = [np.max([6.65, guess[0]-1.5]), np.min([10.3, guess[0]+1.5])]
+        if(obs_plx > 3*obs_plx_er):
+            prange[1,:] = [np.max([0.,1./(obs_plx+3*obs_plx_er)]), np.min([25.,1./np.abs(obs_plx-3*obs_plx_er)])]
+        else:
+            prange[1,:] = [np.max([0.,1./(obs_plx+3*obs_plx_er)]), np.min([25.,1./np.abs(obs_plx-0.8*obs_plx)])]
+            
+            
+    print('1/pi: ',1./obs_plx)
+    print('age prange:',prange[0,:])    
+    print('distance prange:',prange[1,:])
+    
+
+    verbosefile.write('1/pi: %6.1f \n'%(1./obs_plx))
+    verbosefile.write('age prange: [%6.1f , %6.1f] \n'%(prange[0,0],prange[0,1]))
+    verbosefile.write('distance prange: [%6.1f , %6.1f] \n'%(prange[1,0],prange[1,1]))
 
     ndim = prange.shape[0]
 
     # define CE tweak parameters
-    nruns = 2
-    itmax = 100    
-    sample = 50
+    nruns = 5
+    itmax = 150    
+    sample = 100
 
     band = 0.1
     alpha = 0.1
     tol = 1.e-3
 
     res = np.zeros([nruns,ndim])
-    
     
     # start main loop of the method
     print ('----------------------------------------------------------------------')
@@ -552,10 +580,11 @@ def fit_isochroneUBVRI(obs_file, verbosefile, probcut, guess=False,magcut=20.0, 
     verbosefile.write('Age       Dist.       [FeH]      Av \n')
     verbosefile.write('----------------------------------------------------------------------\n')
 
+#    seed = 2**25
     for n in range(nruns):
 
-        seed= np.random.randint(2**20,2**21) # for each run set distinct seed for IMF sampling
-        
+        seed= None #np.random.randint(2**25,2**26) 
+     
         if bootstrap:
             ind_boot = np.random.choice(np.arange(obs_oc.size), 
                                         size=obs_oc.size, replace=True)
@@ -564,18 +593,20 @@ def fit_isochroneUBVRI(obs_file, verbosefile, probcut, guess=False,magcut=20.0, 
         else:
             data_boot = obs_oc
             data_boot_er = obs_oc_er
-        
+            
         res[n,:] = run_isoc_CE(lnlikelihoodCE,data_boot,data_boot_er,filters,refmag,prange,
            sample,itmax,band,alpha,tol,weight,prior,seed,mp.cpu_count()-1,guess)
         
         verbosefile.write('   '.join('%6.3f' % v for v in res[n,:])+'\n')
+        
+        guess = res[n,:].tolist()
        
     print ('')
     print ('-------------------------------------------------------------')
     print (' Final result')
     print ('-------------------------------------------------------------')
     print ('   '.join('%0.6f' % v for v in np.median(res,axis=0)))
-    print ('   '.join('%0.6f' % v for v in mad_std(res,axis=0)))
+    print ('   '.join('%0.3e' % v for v in mad_std(res,axis=0)))
     print ('')    
     print ('Finished isochrone fitting...')
 
@@ -584,15 +615,17 @@ def fit_isochroneUBVRI(obs_file, verbosefile, probcut, guess=False,magcut=20.0, 
     verbosefile.write(' Final result \n')
     verbosefile.write('-------------------------------------------------------------\n')
     verbosefile.write('   '.join('%0.6f' % v for v in np.median(res,axis=0))+'\n')
-    verbosefile.write('   '.join('%0.6f' % v for v in mad_std(res,axis=0))+'\n')
+    verbosefile.write('   '.join('%0.3e' % v for v in mad_std(res,axis=0))+'\n')
     verbosefile.write('\n')    
+    verbosefile.write('Finished isochrone fitting...\n')
 
     return np.median(res,axis=0),res.std(axis=0)
+#    return res[nruns-1,:],res.std(axis=0)
         
 ##############################################################################
+
 def run_isoc_CE(objective,obs,obs_er,filters,refmag,prange,sample,itmax,band,alpha,tol,
                 weight,prior,seed,nthreads=1,guess=False):
-
 
     # Define arrays to be used
     ndim = prange.shape[0]
@@ -622,11 +655,11 @@ def run_isoc_CE(objective,obs,obs_er,filters,refmag,prange,sample,itmax,band,alp
         pars[ind_low,n] = prange[ind_low,0]
         ind_hi = np.where(pars[:,n]-prange[:,1] > 0.)
         pars[ind_hi,n] = prange[ind_hi,1]
-            
+                
     while (iter < itmax and avg_var > tol):
-            
+                
 ##########################################################################################
-#     run liklihood calculation in parallel
+#     parallel test
         pool = mp.Pool(processes=nthreads)
         res = [pool.apply_async(objective, args=(theta,obs,obs_er,filters,
                                                     refmag,prange,weight,prior,seed,)) for theta in pars.T]
@@ -634,6 +667,28 @@ def run_isoc_CE(objective,obs,obs_er,filters,refmag,prange,sample,itmax,band,alp
         pool.close()
         pool.join()
 ###########################################################################################
+        ########### Smooth likelihood   #######################################
+#        bandwidth = np.nanstd(pars,axis=1)/2.
+#        indb = np.where(bandwidth<0.1)
+#        bandwidth[indb] = 0.1
+#        bandwidth = [0.05,0.01,0.05,0.01]
+#        lik_s = np.zeros(lik.size)
+#        
+#        for i in range(sample):
+#            t1 = np.sum(np.exp(-0.5*(pars[0,i]-pars[0,:])**2/bandwidth[0]**2) *\
+#            np.exp(-0.5*(pars[1,i]-pars[1,:])**2/bandwidth[1]**2) *\
+#            np.exp(-0.5*(pars[2,i]-pars[2,:])**2/bandwidth[2]**2) *\
+#            np.exp(-0.5*(pars[3,i]-pars[3,:])**2/bandwidth[3]**2) * lik)
+#            
+#            t2 = np.sum(np.exp(-0.5*(pars[0,i]-pars[0,:])**2/bandwidth[0]**2) *\
+#            np.exp(-0.5*(pars[1,i]-pars[1,:])**2/bandwidth[1]**2) *\
+#            np.exp(-0.5*(pars[2,i]-pars[2,:])**2/bandwidth[2]**2) *\
+#            np.exp(-0.5*(pars[3,i]-pars[3,:])**2/bandwidth[3]**2) )            
+# 
+#            lik_s[i] = t1/t2
+#            
+#        lik = lik_s
+
              
         # sort solution in descending likelihood
         ind = np.argsort(lik)
@@ -647,7 +702,8 @@ def run_isoc_CE(objective,obs,obs_er,filters,refmag,prange,sample,itmax,band,alp
         # discard indices that are out of parameter space
         ind_best = ind_best[np.isfinite(lik[ind_best])]
         
-        # leaving here for now. This allows for change in convergence speed
+        ########### Smooth likelihood   #######################################
+        
         beta = alpha #* hill(iter,4.,0.5*itmax) + 0.01
         peso = np.resize(-lik,(ndim,sample))
 
@@ -661,13 +717,19 @@ def run_isoc_CE(objective,obs,obs_er,filters,refmag,prange,sample,itmax,band,alp
             
             covmat = beta*np.cov(pars[:,ind_best]) + (1.-beta)*covmat
 
-        # check center variance in the last 10 iterations
+        # check center variance
         if (iter > 10):
+            #avg_var = np.max(np.abs(center[:,iter]-center[:,iter-1])/center[:,iter])
             avg_var = np.max(np.std(center[:,iter-10:iter],axis=1)/center[:,iter])
         
-        if(covmat[2,2] < 0.1):
+#        print(pars[3,:])
+#        print('center:',center[:,iter])
+#        print(iter, covmat[diag_ind])
+#        print('best:',lik_best,pars_best)
+#        print('')
+        if (covmat[2,2] < 0.01):
             covmat[2,2] = 0.2
-
+            
         pars = np.random.multivariate_normal(center[:,iter],covmat,sample).T
         
         # enforce prange limits
@@ -680,449 +742,280 @@ def run_isoc_CE(objective,obs,obs_er,filters,refmag,prange,sample,itmax,band,alp
 
         # keep best solution
         pars[:,0]=pars_best
-
-#        print('center:',center[:,iter])
-#        print(iter, avg_var, covmat[diag_ind])
-#        print('best:',lik_best,pars_best)
-#        print('')
         
         iter += 1
 
 #        print 'Best solution'
     print ('     '.join('%0.3f' % v for v in pars_best), "{0:0.2f}".format(lik_best), iter, "{0:0.5f}".format(avg_var))
-    
+#    print ('center: ','     '.join('%0.3f' % v for v in center[:,iter-1]), "{0:0.2f}".format(lik_best), iter, "{0:0.5f}".format(avg_var))
     return pars_best
     
-###############################################
-# add some binaries
-# generate probability of being binary
+##########################################################################################
+# Fit isochrones
+    
+def fit_isochrone_mcmc(obs_file, nwalkers, burn_in, nsteps, thin, guess=False,magcut=17.0):
+    seed = np.random.randint(2**25,2**30)
+    print ('-------------------------------------------------------------')
+    print ('Starting MCMC fitting...')
+    print ('-------------------------------------------------------------')
+    
+    obs = np.genfromtxt(obs_file,names=True)
+    
+    #remove nans
+    cond1 = np.isfinite(obs['Gmag'])
+    cond2 = np.isfinite(obs['BPmag'])
+    cond3 = np.isfinite(obs['RPmag'])
+    cond4 = obs['Gmag'] < magcut
+    
+    ind  = np.where(cond1&cond2&cond3&cond4)
+    
+    obs = obs[ind]
 
-def add_binaries(bin_frac,isoc,isoc_bin,bands,refMag,imf='chabrier',alpha=2.3,
-                 beta=-3,seed=None,binratio=0.8):
-    
-    if(seed != None): 
-        r = np.random.RandomState(seed+1)
-    else:
-        r = np.random.RandomState(seed)
-
-    prob_bin = r.rand(isoc.size)
-    nbin = isoc[prob_bin < bin_frac].size
-    isoc = np.copy(isoc)
-    isoc_bin = np.copy(isoc_bin)
-    
-    bin_comp_stars = sample_from_isoc(isoc_bin,bands,refMag,nbin,imf=imf,alpha=alpha,
-                                      beta=beta,seed=seed)
+    obs_oc = np.copy(obs[['Gmag','BPmag','RPmag']])
+    obs_oc.dtype.names=['Gmag','G_BPmag','G_RPmag']
+    obs_oc_er = np.copy(obs[['e_Gmag','e_BPmag','e_RPmag']])
+    obs_oc_er.dtype.names=['Gmag','G_BPmag','G_RPmag']
+    weight = obs['P'] * obs_oc['Gmag'].min()/obs_oc['Gmag']
     
 
-    for filter in bands:
-        m1 = isoc[filter][prob_bin < bin_frac]
-        m2 = bin_comp_stars[filter]
-        mcomb = m1 - 2.5 * np.log10(1.0 + 10**(-0.4*(m2-m1)))
-        isoc[filter][prob_bin < bin_frac] = mcomb
-        
-    return isoc
-
-###############################################
-# truncated PAreto for Salpeter IMF
-
-def salpeter(alpha, nstars, Mmin, Mmax,seed=None):
+    # load full isochrone grid data and arrays of unique Age and Z values
+    grid_dir = './grids/'
+    mod_grid, age_grid, z_grid = load_mod_grid(grid_dir, isoc_set='MIST-GAIA')
+    filters = ['Gmag','G_BPmag','G_RPmag']
+    refmag = 'Gmag'
     
-    mass_int = np.flip(np.logspace(np.log10(Mmax),np.log10(Mmin), 1000),axis=0)
-
-    ind_low = np.where(mass_int <= 1.)    
-    imf_val = mass_int**(-alpha)
+    labels=['age', 'dist', 'met', 'Ebv', 'Rv','bin', 'alpha']
     
-    #normalize
-    imf_norm =  imf_val / (trapz(imf_val,mass_int))
-
-    # get cumulative distribution
-    cum_imf = cumtrapz(imf_norm,mass_int, initial=0)
-    
-    np.random.seed(seed)
-    
-    # sample from IMF
-    gen_masses = (interp1d(cum_imf,mass_int))(np.random.rand(nstars))
-    return gen_masses
-
-###############################################
-# tapered deMarchi IMF
-
-def deMarchi(alpha, beta, nstars, Mmin, Mmax,seed=None):
-    
-    mass_int = np.flip(np.logspace(np.log10(Mmax),np.log10(Mmin), 1000),axis=0)
-
-    ind_low = np.where(mass_int <= 1.)    
-    imf_val = mass_int**(-alpha)*(1.-np.exp(-(mass_int/1.)**(-beta)))
-    
-    #normalize
-    imf_norm =  imf_val / (trapz(imf_val,mass_int))
-
-    # get cumulative distribution
-    cum_imf = cumtrapz(imf_norm,mass_int, initial=0)
-    
-    np.random.seed(seed)
-    
-    # sample from IMF
-    gen_masses = (interp1d(cum_imf,mass_int))(np.random.rand(nstars))
-    return gen_masses
-
-###############################################
-#     
-def MillerScalo(alpha,nstars, Mmin, Mmax,seed=None):
-    
-    mass_int = np.flip(np.logspace(np.log10(Mmax),np.log10(Mmin), 100),axis=0)
-
-    ind_low = np.where(mass_int <= 1.)    
-    imf_val = mass_int**(-alpha)
-    imf_val[ind_low] = mass_int[ind_low]**(0.)
-    
-    #normalize
-    imf_norm =  imf_val / (trapz(imf_val,mass_int))
-
-    # get cumulative distribution
-    cum_imf = cumtrapz(imf_norm,mass_int, initial=0)
-    
-    np.random.seed(seed)
-    
-    # sample from IMF
-    gen_masses = (interp1d(cum_imf,mass_int))(np.random.rand(nstars))
-    return gen_masses
-
-###############################################
-# Chabrier (2001) exponential form of the IMF.
-# http://adsabs.harvard.edu/abs/2001ApJ...554.1274C
-    
-def chabrier(alpha,nstars, Mmin, Mmax,seed=None):
-    
-    #mass_int = np.linspace(Mmin,Mmax,1000)
-    mass_int = np.flip(np.logspace(np.log10(Mmax),np.log10(Mmin),1000),axis=0)
-    # Chabrier (2001) exponential form of the IMF.
-    # http://adsabs.harvard.edu/abs/2001ApJ...554.1274C
-    
-#    imf_val = 3. * mass_int ** (-3.3) * np.exp(-(716.4 / mass_int) ** 0.25)
-    
-    #Chabrier (2003) - http://adsabs.harvard.edu/abs/2003PASP..115..763C
-    ind_low = np.where(mass_int <= 1.)    
-    imf_val = 4.43e-2*mass_int**(-alpha)
-    imf_val[ind_low] = 0.158*np.exp(-0.5*(np.log10(mass_int[ind_low])-
-           np.log10(0.08))**2/0.69**2)
-    
-    #normalize
-    imf_norm =  imf_val / (trapz(imf_val,mass_int))
-
-    # get cumulative distribution
-    cum_imf = cumtrapz(imf_norm,mass_int, initial=0)
-    
-    r = np.random.RandomState(seed)
-    # sample from IMF
-    gen_masses = (interp1d(cum_imf,mass_int))(r.rand(nstars))
-
-    return gen_masses
-###############################################
-# sample from given isochrone
-    
-def sample_from_isoc(rawisoc,bands,refMag,nstars,imf='chabrier',alpha=2.3,
-                     beta=-3,Mcut=False,seed=None,binmasses=None):
-    
-#    if (Mcut and Abscut): sys.exit('Both Mcut and Abscut are not allowed simultaneaously!')
-    
-    if(Mcut):
-        ind = np.abs(rawisoc[refMag]-Mcut).argmin()
-        Mmin, Mmax = rawisoc['Mini'][ind], np.max(rawisoc['Mini'])
-        if (Mmin==Mmax): Mmin=0.99*Mmin
-    else:
-        Mmin, Mmax = np.min(rawisoc['Mini']),np.max(rawisoc['Mini'])
-        
-    # get mass vector according to IMF
-    
-    if imf:
-        if imf == 'salpeter':
-            # print 'Using Salpeter IMF with alpha=2.35 in mass interval: [',Mmin,',',Mmax,']'
-            masses = salpeter(alpha, nstars, Mmin, Mmax)
-        if imf == 'chabrier':
-            # print 'Using Chabrier(2001) IMF in mass interval: [',Mmin,',',Mmax,']'
-            masses = chabrier(alpha,nstars, Mmin, Mmax,seed=seed)
-        if imf == 'MillerScalo':
-            # print MillerScalo
-            masses = MillerScalo(alpha,nstars, Mmin, Mmax,seed=seed)
-        if imf == 'deMarchi':
-            masses = deMarchi(alpha,beta, nstars, Mmin, Mmax,seed=seed)
-    else:
-        raise ValueError('The IMF was not specified')
-
-    if (binmasses is not None):
-        masses = binmasses
-        masses[masses<Mmin]=Mmin
-        masses[masses>Mmax]=Mmax
-
-    # interpolate photometry on the grid for the given masses
-    photint = []
-
-    for filter in bands:
-        aux = interp1d(rawisoc['Mini'],rawisoc[filter])
-        photint.append(aux(masses))
-        
-    photint.append(masses)
-    
-    cols = bands[:]
-    cols.append('Mini')
-    
-    return np.core.records.fromarrays(photint, names=cols)
-    
-###############################################
-# function to get isochrone from grid given an age, metalicity
-
-def get_iso_from_grid(age,met,bands,refMag,Abscut=False, nointerp=False):
-    
-    global mod_grid, age_grid, z_grid
-    # check to see if grid is loaded
-    if 'mod_grid' not in globals(): 
-        raise NameError('Isochrone grid not loaded!')
-        
-    # find closest values to given age and Z
-    dist_age = np.abs(age - age_grid)#/age
-    ind_age = dist_age.argsort()
-    dist_z = np.abs(met - z_grid)#/met
-    ind_z = dist_z.argsort()
-    
-    dist0 = np.sqrt(dist_age[ind_age[0]]**2 + dist_z[ind_z[0]]**2)
-    dist1 = np.sqrt(dist_age[ind_age[1]]**2 + dist_z[ind_z[1]]**2)
-
-#    dist0 = np.sqrt(dist_age[ind_age[0]]**2)
-#    dist1 = np.sqrt(dist_age[ind_age[1]]**2)
-    
-    dist_age_0 = dist_age[ind_age[0]]/(dist_age[ind_age[0]]+dist_age[ind_age[1]])
-    dist_age_1 = dist_age[ind_age[1]]/(dist_age[ind_age[0]]+dist_age[ind_age[1]])
-    dist_z_0 = dist_z[ind_z[0]]/(dist_z[ind_z[0]]+dist_z[ind_z[1]])
-    dist_z_1 = dist_z[ind_z[1]]/(dist_z[ind_z[0]]+dist_z[ind_z[1]])
-    
-    dist0 = np.sqrt(dist_age_0**2 + dist_z_0**2)
-    dist1 = np.sqrt(dist_age_1**2 + dist_z_1**2)
-    
-    # get the closest isochrone to the given age and Z
-    #apply absolute mag cut if set
-    if(Abscut):
-        iso1 = mod_grid[(mod_grid['Age'] == age_grid[ind_age[0]]) & 
-                       (mod_grid['Zini'] == z_grid[ind_z[0]]) & 
-                       (mod_grid[refMag] < Abscut)]
-        iso2 = mod_grid[(mod_grid['Age'] == age_grid[ind_age[1]]) & 
-                       (mod_grid['Zini'] == z_grid[ind_z[1]]) & 
-                       (mod_grid[refMag] < Abscut)]
-    else:
-        iso1 = mod_grid[(mod_grid['Age'] == age_grid[ind_age[0]]) &
-                       (mod_grid['Zini'] == z_grid[ind_z[0]])]
-        iso2 = mod_grid[(mod_grid['Age'] == age_grid[ind_age[1]]) &
-                       (mod_grid['Zini'] == z_grid[ind_z[1]])]   
-        
-    photint = []
-    
-    for filter in bands:
-        mass_int = []
-        f_int = []
-        
-        for n in np.unique(iso1['label']):
+    prange = np.array([[6.5,10.3],
+                       [0.1,10.],
+                       [2e-06,0.048],
+                       [0.1,2.0],
+                       [2,4.],
+                       [0.,0.8],
+                       [1.5,3.5]])
             
-            f1 = iso1[filter][iso1['label'] == n]
-            f2 = iso2[filter][iso2['label'] == n]
             
-            m1 = iso1['Mini'][iso1['label'] == n]
-            m2 = iso2['Mini'][iso2['label'] == n]
+    ndim = prange.shape[0]
 
-            if(f1.size < 2 or f2.size < 2):
-                continue
+    midpoint = (prange[:,1]-prange[:,0])/2.+prange[:,0]
+    ndim = prange.shape[0]
 
-            if(f1.size > f2.size):
-                npoints = f2.size
-                
-                f1i = interp1d(np.arange(f1.size),f1)
-                f1 = f1i(np.linspace(0,f1.size-1,npoints))
-                
-                m1i = interp1d(np.arange(m1.size),m1)
-                m1 = m1i(np.linspace(0,m1.size-1,npoints))
-            else:
-                npoints = f1.size
+    # define uniformly distributed walker starting positions
+    pos=[]
+    lik=[]
+    for i in range(nwalkers):
+        pars = []
+        for k in range(ndim):
+            pars.append(np.random.uniform(prange[k,0],prange[k,1]))
+        pos.append(np.array(pars))
+        lik.append(lnlikelihood(pars,obs_oc,obs_oc_er,filters,refmag,prange,weight))
 
-                f2i = interp1d(np.arange(f2.size),f2)
-                f2 = f2i(np.linspace(0,f2.size-1,npoints))
-                
-                m2i = interp1d(np.arange(m2.size),m2)
-                m2 = m2i(np.linspace(0,m2.size-1,npoints))
-                
-            t = dist0/(dist0+dist1)
-            
-            mass_int = np.concatenate([mass_int, (1.-t)*m1+t*m2])
-            f_int = np.concatenate([f_int, (1.-t)*f1+t*f2 ])
-            
-
-        photint.append(f_int)
-
-    # keep mass field for future use
-    photint.append(mass_int)
-
-##########################################################
-    if nointerp:
-        # get the closest isochrone to the given age and Z
-        #apply absolute mag cut if set
-        if(Abscut):
-            iso = mod_grid[(mod_grid['Age'] == age_grid[ind_age[0]]) & 
-                           (mod_grid['Zini'] == z_grid[ind_z[0]]) & 
-                           (mod_grid[refMag] < Abscut)]
-        else:
-            iso = mod_grid[(mod_grid['Age'] == age_grid[ind_age[0]]) &
-                          (mod_grid['Zini'] == z_grid[ind_z[0]])]
-            
-        photint = []
-
-        for filter in bands:
-            photint.append(iso[filter])
-        photint.append(iso['Mini'])
-##########################################################
+    # If there is initial guess generate walkers around it
+#    scale=(prange[:,1]-prange[:,0])/10.
+#    if guess:
+#        pos = [guess + scale*np.random.randn(ndim) for i in range(nwalkers)]
         
-    
-    cols = bands[:]
-    cols.append('Mini')
-    
-    return np.core.records.fromarrays(photint, names=cols)
-    
-###############################################
-# function to get CCM model coeficients
-# for the GAIA filters we used: https://arxiv.org/pdf/1008.0815.pdf
+    start_time = timeit.default_timer()
 
-def ccm_coefs(band):
-    # CCM coefficients revised by O'Donnell (1994)
-    dict_94 = {'Bmag': [4460.62, 0.9999253931841896, 0.94553192328962365],
-            'Hmag': [16369.53, 0.2596053235545497, -0.23834844166071026],
-            'Imag': [8036.57, 0.76735566136864775, -0.51126852210308293],
-            'Jmag': [12314.46, 0.4105283397212145, -0.37691364988341475],
-            'Kmag': [21937.18, 0.16203573610362962, -0.14876800161430803],
-            'Rmag': [6557.09, 0.90991266273182836, -0.29970863780329793],
-            'Umag': [3641.89, 0.96420188342499813, 1.784213363585738],
-            'Vmag': [5501.7, 0.99974902186052628, -0.0046292182005786527],
-            'B_Tmag': [4350.0, 1.0017962252392263, 1.0362801277999945],
-            'V_Tmag': [5050.0, 1.0044713895752799, 0.36691338631832937],
-            'G_BPmag': [5320.0, 1.0042005025756102, 0.12595552528038209],
-            'G_RPmag': [7970.0, 0.77261277538121242, -0.49646921986943959],
-            'Gmag': [6730.0, 0.89044911179059461, -0.31133471454740169]}
+    # setup sampler
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnlikelihood,a=1.1,
+                                    args=(obs_oc,obs_oc_er,filters,refmag,prange,weight), 
+                                    threads=mp.cpu_count()-1,live_dangerously=True)
+    # run sampler in the burn in phase
+    sampler.run_mcmc(pos, burn_in)
     
-    # Original Cardelli, Clayton, and Mathis (1989 ApJ. 345, 245)
-    dict_ccm_ori = {'Bmag': [4460.62, 1.0025759394309195, 0.92908077063668137],
-                    'Hmag': [16369.53, 0.2596053235545497, -0.23834844166071026],
-                    'Imag': [8036.57, 0.77833673604251075, -0.57683220088641463],
-                    'Jmag': [12314.46, 0.4105283397212145, -0.37691364988341475],
-                    'Kmag': [21937.18, 0.16203573610362962, -0.14876800161430803],
-                    'Rmag': [6557.09, 0.90937658249478737, -0.28122644122534407],
-                    'Umag': [3641.89, 0.95941873606501926, 1.8578498871346709],
-                    'Vmag': [5501.7, 0.99957590813034558, -0.0033509151940263101],
-                    'B_Tmag': [4350.0, 0.99736986014984541, 1.0711315721870396],
-                    'V_Tmag': [5050.0, 1.015771886403408, 0.28589221136305393],
-                    'G_BPmag': [5320.0, 1.0087722119558464, 0.092674041614019612],
-                    'G_RPmag': [7970.0, 0.78420684534377993, -0.56542798221110957],
-                    'Gmag': [6730.0, 0.89312322728995797, -0.31352377819769739]}
-
-    return dict_94[band]
-
-###############################################
-# Make an observed synthetic cluster given an isochrone,
-
-def make_obs_iso(bands, iso, dist, Av):
-    #redden and move isochrone
-    obs_iso = np.copy(iso)
+    # process samples
+    samples = sampler.chain[:,:, :].reshape((-1, ndim))
     
-    for filter in bands:
+    # get best values and confidence intervals
+    best_vals = np.array(map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
+                                 zip(*np.percentile(samples, [15, 50, 84],
+                                                    axis=0))))
+    
+    # get best solution from maximul likelihood sampled
+    
+    best_sol = sampler.flatchain[sampler.flatlnprobability.argmax()]
+    
+    # reset sampler
+    sampler.reset()
+    
+    # setup sampler after burn-in
+    sampler = emcee.EnsembleSampler(nwalkers, ndim, lnlikelihood,a=1.1,
+                                    args=(obs_oc,obs_oc_er,filters,refmag,prange,weight,seed), 
+                                    threads=mp.cpu_count()-1,live_dangerously=True)
+    
+    print ('done burn in phase...')
+    print ('')
+    print ('Best solution of burn in phase: ', best_sol)
+    print ('Average solution of burn in phase: ',best_vals[:,0])
+    
+    # redefine initial positions based on burn in results
+#    scale = 0.01*best_vals[:,0]
+#    pos = [best_vals[:,0] + scale*np.random.randn(ndim) for i in range(nwalkers)]
+    
+    # run sampler for final sample
+    sampler.run_mcmc(pos, nsteps, thin=thin)
+    
+    # get final best solution    
+    best_sol = sampler.flatchain[sampler.flatlnprobability.argmax()]
+    
+    print ('Finished sampling')
+    
+    samples = sampler.chain[:,nsteps/2/thin:, :].reshape((-1, ndim))
+    best_vals = np.array(map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]),
+                                 zip(*np.percentile(samples, [5, 50, 95],
+                                                    axis=0))))
+    
+    print("Mean acceptance fraction: {0:.3f}"
+                    .format(np.mean(sampler.acceptance_fraction)))
+    
+    print ('Elapsed time: ', (timeit.default_timer() - start_time)/60., ' minutes')
+
+
+    ###############################################################
+    # print results
+    
+    fig = corner.corner(samples, labels=labels, levels=(0.68,0.95), smooth=True)
+    
+    for i in range(ndim):
+        print (labels[i],best_sol[i],'-',best_vals[i,1],'+',best_vals[i,2])
+    
+    print ('')
+    print ('From sample averages:')
+    for i in range(ndim):
+        print (labels[i],best_vals[i,0],'-',best_vals[i,1],'+',best_vals[i,2])
         
-        # get CCm coeficients
-        wav,a,b = ccm_coefs(filter)
-    
-        # apply ccm model and make observed iso
-        obs_iso[filter] = iso[filter] + 5.*np.log10(dist*1.e3) - 5.+ ( (a + b/3.1)*Av )
         
-    return obs_iso
-
-
-###############################################
-# generate a synthetic cluster
+    # plot chains
+    fig, axes = plt.subplots(ndim, figsize=(10, 7), sharex=True)
+    samples = sampler.chain
+    for i in range(ndim):
+        ax = axes[i]
+        for k in range(nwalkers):
+            ax.plot(np.array(samples[k,:, i]), "k", alpha=0.1)
+        ax.set_ylabel(labels[i])
     
-def model_cluster(age,dist,FeH,Av,bin_frac,nstars,bands,refMag,Mcut=False,error=True,
-                  seed=None,Abscut=False,imf='chabrier',alpha=2.3,beta=-3):
+    # plot averages
+    fig, axes = plt.subplots(ndim, figsize=(10, 7), sharex=True)
+    for i in range(ndim):
+        ax = axes[i]
+        for k in range(nwalkers):
+            avgs = np.cumsum(np.array(samples[k,:, i]))/(np.arange(len(samples[k,:, i]))+1)        
+            ax.plot(avgs, "k", alpha=0.1)
+        ax.set_ylabel(labels[i])
+    
+
+    print ('-------------------------------------------------------------')
+    print (' Final result')
+    print ('-------------------------------------------------------------')
+    print ('   '.join('%0.3f' % v for v in best_vals[:,1]))
+    print ('   '.join('%0.3f' % v for v in (best_vals[:,1]+best_vals[:,2])/3))
+
+    return best_sol, (best_vals[:,1]+best_vals[:,2])/3
+
+
+##########################################################################################
+# Fit isochrones
+    
+def fit_isochrone_DE(obs_file,guess=False,magcut=17.0):
+    
+    from scipy.optimize import differential_evolution
+    
+    print ('Starting isochrone fitting...')
+    
+    obs = np.genfromtxt(obs_file,names=True)
+    
+    #remove nans
+    cond1 = np.isfinite(obs['Gmag'])
+    cond2 = np.isfinite(obs['BPmag'])
+    cond3 = np.isfinite(obs['RPmag'])
+    cond4 = obs['Gmag'] < magcut
+    
+    
+    ind  = np.where(cond1&cond2&cond3&cond4)
+    
+    obs = obs[ind]
+
+    obs_oc = np.copy(obs[['Gmag','BPmag','RPmag']])
+    obs_oc.dtype.names=['Gmag','G_BPmag','G_RPmag']
+    obs_oc_er = np.copy(obs[['e_Gmag','e_BPmag','e_RPmag']])
+    obs_oc_er.dtype.names=['Gmag','G_BPmag','G_RPmag']
+    weight = obs['P'] #* obs_oc['Gmag'].min()/obs_oc['Gmag']
+    
+
+    # load full isochrone grid data and arrays of unique Age and Z values
+    grid_dir = './grids/'
+    mod_grid, age_grid, z_grid = load_mod_grid(grid_dir, isoc_set='GAIA')
+    filters = ['Gmag','G_BPmag','G_RPmag']
+    refmag = 'Gmag'
+    
+    labels=['age', 'dist', 'met', 'Ebv', 'Rv','bin']
+    
+    prange = np.array([(6.6,10.1),
+                       (.1,10.),
+                       (0.008,0.07),
+                       (0.001,5.0),
+                       (2.,4),
+                       (0.,0.8)])
+
+    midpoint = (prange[:,1]-prange[:,0])/2.+prange[:,0]
+    ndim = prange.shape[0]
+
+    # define CE tweak parameters
+    nruns = 5
+    itmax = 100    
+    sample = 500
+
+    band = 0.15
+    alpha = 0.1
+    tol = 1.e-3
+
+    res = np.zeros([nruns,ndim])
+    
+    # start main loop of the method
+    print ('-------------------------------------------------------------')
+    print ('Age       Dist.       Met.      Ebv       Rv        BinF.    ')
+    print ('-------------------------------------------------------------')
+    
+    
+    for n in range(nruns):
+        # set seed for the run
+        seed = np.random.randint(2**20,2**30)
         
-    # get isochrone
-    met = (10.**FeH)*0.0152
-    grid_iso = get_iso_from_grid(age,met,bands,refMag,Abscut=Abscut)
+        result = differential_evolution(lnlikelihoodCE, prange, 
+                                        args=(obs_oc,obs_oc_er,filters,refmag,prange,weight,seed))
 
-    # make an observed isochrone
-    obs_iso = make_obs_iso(bands, grid_iso, dist, Av)
+        res[n,:] = result.x
+       
+    print ('')
+    print ('-------------------------------------------------------------')
+    print (' Final result')
+    print ('-------------------------------------------------------------')
+    print ('   '.join('%0.3f' % v for v in np.median(res,axis=0)))
+    print ('   '.join('%0.3f' % v for v in res.std(axis=0)))
+    print ('')
+    
+    print ('Finished isochrone fitting...')
 
-#    use_imf = 'salpeter' 
-#    use_imf = 'chabrier' 
-    #use_imf = 'MillerScalo' 
-#    use_imf = 'deMarchi'
-
-    #sample from isochrone
-    gen_iso = sample_from_isoc(obs_iso,bands,refMag,nstars,imf=imf,alpha=alpha, 
-                               beta=beta, Mcut=Mcut,seed=seed)
-    gen_iso_bin = sample_from_isoc(obs_iso,bands,refMag,nstars,imf=imf,alpha=alpha, 
-                               beta=beta,Mcut=False,seed=seed)
-
-    # add some binaries
-    gen_iso = add_binaries(bin_frac,gen_iso,gen_iso_bin,bands,refMag,imf=imf,
-                           alpha=alpha,beta=beta,seed=seed,binratio=0.8)
-
-    # add some errors
-    if error:
-        gen_iso = add_phot_errors(gen_iso,bands)
-        gen_iso_er = get_phot_errors(gen_iso,bands)
-
-
-    return gen_iso
+    return np.median(res,axis=0),res.std(axis=0)
+        
 ##############################################################################
-# Define the log likelihood
-# theta -> vector of model parameters [age, dist, z, ebv, Rv]
-# 
-def lnlikelihoodCE(theta,obs_iso,obs_iso_er,bands,refMag,prange,weight,prior=[[1.],[1.e3]],seed=None):
-    
-    # generate synth cluster from input parameters
-    age, dist, FeH, Av = theta
-    
-    bin_frac = 0.5
 
-    # number of stars to generate
-    nstars = obs_iso.size
-    Mlim = obs_iso[refMag].max()
-    
-    # get synth isochrone
 
-    mod_cluster = model_cluster(age,dist,FeH,Av,bin_frac,1000,bands,
-                                refMag,error=False,Mcut=Mlim,seed=seed,
-                                imf='chabrier',alpha=2.1, beta=-3.)
 
-    # get distance of each observed star to the model isochrone
-    obs = np.array(obs_iso[bands].tolist())
-    obs_er = np.array(obs_iso_er[bands].tolist())
 
-    mod = np.array(mod_cluster[bands].tolist())
 
-    p_iso = []
-    for i in range(nstars):
 
-#        aux = np.prod(1./np.sqrt(2.*np.pi)*
-#                      np.exp(-0.5*(obs[i,:]-mod)**2),axis=1)
-        
-        aux = np.nanprod(1./np.sqrt(2.*np.pi*obs_er[i,:]**2)*
-                      np.exp(-0.5*(obs[i,:]-mod)**2/obs_er[i,:]**2),axis=1)
-        
-#        aux = np.prod(np.exp(-0.5*np.abs(obs[i,:]-mod)),axis=1)
 
-        p_iso.append(np.max(aux))
 
-    p_iso = np.array(p_iso)*np.nanprod(np.exp(-0.5*( (theta-prior[0,:])/prior[1,:] )**2))
-        
-    p_iso[p_iso< 1.e-307] = 1.e-307   
-    res = np.log(p_iso) + np.log(weight)
-    res = -np.mean(res)
-    
-    #print res, p_iso.max(), p_iso.min() #'   '.join('%0.3f' % v for v in theta)
-    
-    return res
+
+
+
+
+
+
+
+
 
 
 
